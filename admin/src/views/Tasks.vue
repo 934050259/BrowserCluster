@@ -89,6 +89,15 @@
                   <span>{{ row.url }}</span>
                 </el-link>
               </el-tooltip>
+              <!-- 显示重定向后的实际 URL -->
+              <div v-if="row.result?.metadata?.actual_url && row.result.metadata.actual_url !== row.url" class="actual-url-info">
+                <el-tooltip :content="'实际访问: ' + row.result.metadata.actual_url" placement="bottom">
+                  <span class="actual-url-text">
+                    <el-icon><Right /></el-icon>
+                    {{ row.result.metadata.actual_url }}
+                  </span>
+                </el-tooltip>
+              </div>
             </div>
           </template>
         </el-table-column>
@@ -432,6 +441,11 @@
               <el-divider content-position="left">页面元数据</el-divider>
               <el-descriptions :column="2" border size="default" class="detail-descriptions">
                 <el-descriptions-item label="页面标题" :span="2" width="120px">{{ currentTask.result.metadata?.title || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="实际 URL" :span="2" v-if="currentTask.result.metadata?.actual_url">
+                  <el-link :href="currentTask.result.metadata.actual_url" target="_blank" type="success" class="detail-url-link">
+                    {{ currentTask.result.metadata.actual_url }}
+                  </el-link>
+                </el-descriptions-item>
                 <el-descriptions-item label="加载用时">
                   <el-tag type="warning" effect="plain" size="default">
                     {{ currentTask.result.metadata?.load_time?.toFixed(2) }}s
@@ -501,7 +515,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu } from '@element-plus/icons-vue'
+import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right } from '@element-plus/icons-vue'
 import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch } from '../api'
 import dayjs from 'dayjs'
 
@@ -868,7 +882,30 @@ onMounted(() => {
 }
 
 .task-url-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.actual-url-info {
+  margin-top: 2px;
+}
+
+.actual-url-text {
+  font-size: 12px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actual-url-text .el-icon {
+  font-size: 14px;
+  color: #3b82f6;
 }
 
 .url-link-bold {

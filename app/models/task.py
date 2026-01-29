@@ -44,7 +44,8 @@ class ScrapeRequest(BaseModel):
 class TaskMetadata(BaseModel):
     """任务元数据模型"""
     title: Optional[str] = None  # 页面标题
-    url: str  # 页面 URL
+    url: str  # 页面请求 URL
+    actual_url: Optional[str] = None  # 实际加载的 URL (处理重定向后)
     load_time: float  # 加载时间（秒）
     timestamp: datetime = Field(default_factory=datetime.now)  # 时间戳
 

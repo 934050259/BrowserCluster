@@ -127,6 +127,7 @@ class Scraper:
 
             # 获取页面 HTML
             html = await page.content()
+            actual_url = page.url # 获取重定向后的实际 URL
 
             # 计算加载时间
             load_time = time.time() - start_time
@@ -163,6 +164,7 @@ class Scraper:
                 "metadata": {
                     "title": title,
                     "url": url,
+                    "actual_url": actual_url,
                     "status_code": status_code,
                     "load_time": load_time,
                     "timestamp": time.time()
