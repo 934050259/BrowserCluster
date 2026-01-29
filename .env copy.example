@@ -1,0 +1,45 @@
+# FastAPI 配置
+APP_NAME=BrowserCluster
+APP_VERSION=1.0.0
+DEBUG=True
+HOST=0.0.0.0
+PORT=8000
+
+# MongoDB 配置
+MONGO_URI=mongodb://localhost:27017/
+MONGO_DB=browser_cluster
+
+# Redis 配置
+REDIS_URL=redis://localhost:6379/0
+REDIS_CACHE_URL=redis://localhost:6379/1
+
+# RabbitMQ 配置
+RABBITMQ_URL=amqp://guest:guest@localhost:5672/
+RABBITMQ_QUEUE=scrape_tasks
+RABBITMQ_EXCHANGE=browser_cluster
+
+# Playwright 配置
+BROWSER_TYPE=chromium
+HEADLESS=True
+BLOCK_IMAGES=False
+BLOCK_MEDIA=False
+DEFAULT_TIMEOUT=30000
+DEFAULT_WAIT_FOR=networkidle
+
+# Worker 配置
+WORKER_CONCURRENCY=3
+MAX_RETRIES=3
+RETRY_DELAY=5
+
+# 缓存配置
+CACHE_ENABLED=True
+DEFAULT_CACHE_TTL=3600
+
+# 分布式节点配置
+NODE_ID=node-1
+NODE_TYPE=worker
+HEARTBEAT_INTERVAL=30
+
+# 日志配置
+LOG_LEVEL=INFO
+LOG_FILE=logs/app.log

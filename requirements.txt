@@ -1,0 +1,31 @@
+# 核心框架
+fastapi==0.123.5
+uvicorn==0.38.0
+
+# 数据验证与配置
+pydantic==2.11.7
+pydantic-settings==2.12.0
+python-dotenv==1.1.1
+
+# 浏览器自动化与抓取
+playwright==1.57.0
+playwright-stealth==2.0.1
+
+# 数据库驱动
+pymongo==4.15.5
+redis==7.1.0
+pika==1.3.2
+
+# 网络请求与 API
+httpx==0.28.1
+requests==2.32.5
+python-multipart==0.0.20
+
+# 安全与加密
+python-jose==3.5.0
+passlib==1.7.4
+bcrypt==3.2.2
+cryptography==46.0.3
+
+# 其他工具
+motor==3.7.1
