@@ -44,7 +44,6 @@ env/
 
 # Logs
 logs/*
-!logs/.gitkeep
 *.log
 
 # Database
@@ -73,4 +72,3 @@ htmlcov/
 .dmypy.json
 dmypy.json
 data/*
-!data/.gitkeep
