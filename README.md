@@ -141,7 +141,7 @@
 
 1. **克隆仓库**
    ```bash
-   git clone https://github.com/yourusername/browser-cluster.git
+   git clone https://github.com/934050259/BrowserCluster.git
    cd browser-cluster
    ```
 
