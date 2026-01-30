@@ -6,7 +6,8 @@
 import time
 import base64
 import re
-from typing import Optional, Dict, Any, List
+import json
+from typing import Optional, Dict, Any, List, Union
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright_stealth import Stealth
 from app.core.browser import browser_manager
@@ -66,6 +67,40 @@ class Scraper:
 
             # 创建新的上下文（确保 User-Agent 和 代理设置生效）
             context = await browser.new_context(**context_options)
+
+            # 设置 Cookies
+            cookies = params.get("cookies")
+            if cookies:
+                try:
+                    formatted_cookies = []
+                    if isinstance(cookies, str):
+                        # 处理字符串格式: "name1=value1; name2=value2"
+                        from urllib.parse import urlparse
+                        domain = urlparse(url).netloc
+                        for item in cookies.split(';'):
+                            if '=' in item:
+                                name, value = item.strip().split('=', 1)
+                                formatted_cookies.append({
+                                    "name": name,
+                                    "value": value,
+                                    "domain": domain,
+                                    "path": "/"
+                                })
+                    elif isinstance(cookies, list):
+                        # 处理 JSON 数组格式
+                        for cookie in cookies:
+                            if isinstance(cookie, dict) and "name" in cookie and "value" in cookie:
+                                # 确保有 domain，Playwright 要求 cookie 必须有 domain 或 url
+                                if "domain" not in cookie and "url" not in cookie:
+                                    from urllib.parse import urlparse
+                                    cookie["domain"] = urlparse(url).netloc
+                                formatted_cookies.append(cookie)
+                    
+                    if formatted_cookies:
+                        await context.add_cookies(formatted_cookies)
+                except Exception as e:
+                    print(f"Error setting cookies: {e}")
+
             page = await context.new_page()
 
             # 设置视口大小

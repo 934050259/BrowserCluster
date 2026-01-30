@@ -400,6 +400,23 @@
               />
             </el-form-item>
             <div class="form-tip">输入模式并回车即可添加多条规则</div>
+
+            <el-form-item>
+              <template #label>
+                <div class="label-with-tip">
+                  <span>Cookies (可选)</span>
+                  <el-tooltip content="支持字符串 (name=value; name2=value2) 或 JSON 数组" placement="top">
+                    <el-icon class="help-icon"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+              </template>
+              <el-input
+                v-model="scrapeForm.params.cookies"
+                type="textarea"
+                :rows="3"
+                placeholder='name1=value1; name2=value2 或 [{"name": "n1", "value": "v1"}]'
+              />
+            </el-form-item>
           </el-card>
         </div>
       </el-form>
@@ -595,11 +612,12 @@ const scrapeForm = ref({
       height: 1080
     },
     proxy: {
-      server: '',
-      username: '',
-      password: ''
-    },
-    stealth: true,
+        server: '',
+        username: '',
+        password: ''
+      },
+      cookies: '',
+      stealth: true,
     intercept_apis: [],
     intercept_continue: false
   },
@@ -746,6 +764,21 @@ const submitTask = async () => {
     if (!submitData.params.intercept_apis || submitData.params.intercept_apis.length === 0) {
       submitData.params.intercept_apis = null
     }
+
+    // Cookie 处理：尝试解析 JSON，如果失败则保持原样字符串
+    if (submitData.params.cookies) {
+      const cookieVal = submitData.params.cookies.trim()
+      if (cookieVal.startsWith('[') && cookieVal.endsWith(']')) {
+        try {
+          submitData.params.cookies = JSON.parse(cookieVal)
+        } catch (e) {
+          // 如果解析失败，说明不是有效的 JSON 数组，保持为字符串
+          console.warn('Cookies looks like JSON but parse failed, using as string')
+        }
+      }
+    } else {
+      submitData.params.cookies = null
+    }
     
     // 视口配置处理：如果宽高为 0 或无效，则设为 null 使用默认值
     if (!submitData.params.viewport || !submitData.params.viewport.width || !submitData.params.viewport.height) {
@@ -787,6 +820,7 @@ const resetForm = () => {
         username: '',
         password: ''
       },
+      cookies: '',
       stealth: true,
       intercept_apis: [],
       intercept_continue: false

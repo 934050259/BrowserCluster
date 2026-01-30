@@ -100,10 +100,14 @@
    RABBITMQ_URL=amqp://guest:guest@localhost:5672/
    ```
 
-3. **初始化配置**
-   运行初始化脚本，将默认配置导入 SQLite 数据库（供系统配置管理使用）：
+3. **初始化配置与账号**
+   运行初始化脚本，导入默认配置并创建初始管理员账号：
    ```bash
+   # 初始化系统配置
    python scripts/init_configs_db.py
+
+   # 初始化默认管理员账号 (账号: admin, 密码: admin)
+   python scripts/init_admin.py
    ```
 
 4. **后端设置**
