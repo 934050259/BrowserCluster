@@ -244,7 +244,7 @@ const handleLogin = async () => {
 .login-box {
   width: 420px;
   padding: 40px;
-  background: rgba(255, 255, 255, 0.8); /* 亮色玻璃拟态 */
+  background: rgb(232, 243, 248); /* 亮色玻璃拟态 */
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.5);
