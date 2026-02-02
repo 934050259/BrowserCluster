@@ -6,12 +6,12 @@
 import time
 import base64
 import re
-import json
 from typing import Optional, Dict, Any, List, Union
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright_stealth import Stealth
 from app.core.browser import browser_manager
 from app.core.config import settings
+from urllib.parse import urlparse
 
 
 class Scraper:
@@ -73,30 +73,64 @@ class Scraper:
             if cookies:
                 try:
                     formatted_cookies = []
+                    
+                    # 提取主域名 (e.g. i.csdn.net -> .csdn.net)
+                    # 这样 Cookie 可以在所有子域名（如 api.csdn.net）下共享
+                    parsed_url = urlparse(url)
+                    host = parsed_url.netloc.split(':')[0]
+                    domain_parts = host.split('.')
+                    if len(domain_parts) >= 2:
+                        main_domain = f".{'.'.join(domain_parts[-2:])}"
+                    else:
+                        main_domain = host
+
                     if isinstance(cookies, str):
                         # 处理字符串格式: "name1=value1; name2=value2"
-                        from urllib.parse import urlparse
-                        domain = urlparse(url).netloc
                         for item in cookies.split(';'):
+                            item = item.strip()
+                            if not item:
+                                continue
                             if '=' in item:
-                                name, value = item.strip().split('=', 1)
-                                formatted_cookies.append({
-                                    "name": name,
-                                    "value": value,
-                                    "domain": domain,
-                                    "path": "/"
-                                })
+                                name, value = item.split('=', 1)
+                                cookie_base = {
+                                    "name": name.strip(),
+                                    "value": value.strip(),
+                                    "path": "/",
+                                    "secure": parsed_url.scheme == "https",
+                                    "sameSite": "Lax"
+                                }
+                                # 策略：同时在主域名和当前主机名设置 Cookie，确保跨域和主域都能识别
+                                formatted_cookies.append({**cookie_base, "domain": main_domain})
+                                if host != main_domain.lstrip('.'):
+                                    formatted_cookies.append({**cookie_base, "domain": host})
                     elif isinstance(cookies, list):
                         # 处理 JSON 数组格式
                         for cookie in cookies:
                             if isinstance(cookie, dict) and "name" in cookie and "value" in cookie:
-                                # 确保有 domain，Playwright 要求 cookie 必须有 domain 或 url
+                                # 确保有 domain 或 url
                                 if "domain" not in cookie and "url" not in cookie:
-                                    from urllib.parse import urlparse
-                                    cookie["domain"] = urlparse(url).netloc
+                                    cookie["domain"] = main_domain
+                                if "path" not in cookie:
+                                    cookie["path"] = "/"
+                                if "secure" not in cookie:
+                                    cookie["secure"] = parsed_url.scheme == "https"
                                 formatted_cookies.append(cookie)
+                    elif isinstance(cookies, dict):
+                        # 处理 JSON 对象格式: {"name1": "value1", "name2": "value2"}
+                        for name, value in cookies.items():
+                            cookie_base = {
+                                "name": name,
+                                "value": str(value),
+                                "path": "/",
+                                "secure": parsed_url.scheme == "https",
+                                "sameSite": "Lax"
+                            }
+                            formatted_cookies.append({**cookie_base, "domain": main_domain})
+                            if host != main_domain.lstrip('.'):
+                                formatted_cookies.append({**cookie_base, "domain": host})
                     
                     if formatted_cookies:
+                        print(f"Adding {len(formatted_cookies)} cookies to context with domain {main_domain}")
                         await context.add_cookies(formatted_cookies)
                 except Exception as e:
                     print(f"Error setting cookies: {e}")

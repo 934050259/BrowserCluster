@@ -404,8 +404,8 @@
             <el-form-item>
               <template #label>
                 <div class="label-with-tip">
-                  <div class="form-tip">支持标准的 Cookie 文本或 JSON 数组，系统将自动解析</div>
-                  <el-tooltip content="支持字符串 (name=value; name2=value2) 或 JSON 数组" placement="top">
+                  <span>Cookies (可选)</span>
+                  <el-tooltip content="支持浏览器标准的 Cookie 字符串、JSON 数组或 JSON 对象 (Key-Value)" placement="top">
                     <el-icon class="help-icon"><QuestionFilled /></el-icon>
                   </el-tooltip>
                 </div>
@@ -414,9 +414,10 @@
                 v-model="scrapeForm.params.cookies"
                 type="textarea"
                 :rows="3"
-                placeholder='例如: name1=value1; name2=value2 或 [{"name": "n1", "value": "v1"}]'
+                placeholder='例如: name1=value1; name2=value2 或 {"name": "value"} 或 [{"name": "n1", "value": "v1"}]'
               />
             </el-form-item>
+            <div class="form-tip">支持 Cookie 文本、JSON 对象或数组，系统将自动解析</div>
           </el-card>
         </div>
       </el-form>
@@ -768,11 +769,13 @@ const submitTask = async () => {
     // Cookie 处理：尝试解析 JSON，如果失败则保持原样字符串
     if (submitData.params.cookies) {
       const cookieVal = submitData.params.cookies.trim()
-      if (cookieVal.startsWith('[') && cookieVal.endsWith(']')) {
+      // 支持 [ (数组) 或 { (对象) 开头的 JSON
+      if ((cookieVal.startsWith('[') && cookieVal.endsWith(']')) || 
+          (cookieVal.startsWith('{') && cookieVal.endsWith('}'))) {
         try {
           submitData.params.cookies = JSON.parse(cookieVal)
         } catch (e) {
-          // 如果解析失败，说明不是有效的 JSON 数组，保持为字符串
+          // 如果解析失败，说明不是有效的 JSON，保持为字符串
           console.warn('Cookies looks like JSON but parse failed, using as string')
         }
       }

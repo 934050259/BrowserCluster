@@ -22,7 +22,7 @@ class ScrapeParams(BaseModel):
     user_agent: Optional[str] = None  # 自定义 User-Agent
     viewport: Dict[str, int] = Field(default_factory=lambda: {"width": 1920, "height": 1080})  # 视口大小
     proxy: Optional[Dict[str, Any]] = None  # 代理配置 {server, username, password}
-    cookies: Optional[Union[str, List[Dict[str, Any]]]] = None  # Cookies, 支持 str (name=value) 或 list [dict]
+    cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None  # Cookies, 支持 str, list [dict] 或 dict {name: value}
     stealth: bool = True  # 是否启用反检测 (stealth)
     intercept_apis: Optional[List[str]] = None  # 要拦截的接口 URL 模式列表
     intercept_continue: bool = False  # 拦截接口后是否继续请求 (默认 False)
