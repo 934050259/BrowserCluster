@@ -3,7 +3,7 @@
 
 提供任务查询、列表、删除等功能
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from datetime import datetime
 from app.models.task import TaskResponse, BatchDeleteRequest
 from app.db.mongo import mongo
@@ -33,20 +33,31 @@ async def batch_delete_tasks(request: BatchDeleteRequest, current_user: dict = D
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: str, current_user: dict = Depends(get_current_user)):
+async def get_task(
+    task_id: str, 
+    include_html: bool = Query(False, description="是否包含 HTML 源码"),
+    include_screenshot: bool = Query(False, description="是否包含截图数据"),
+    current_user: dict = Depends(get_current_user)
+):
     """
     获取单个任务详情
 
     Args:
         task_id: 任务 ID
+        include_html: 是否在结果中包含完整的 HTML 源码 (数据量大时建议关闭)
+        include_screenshot: 是否在结果中包含截图 Base64 (数据量大时建议关闭)
 
     Returns:
         TaskResponse: 任务详细信息
-
-    Raises:
-        HTTPException: 任务不存在时返回 404
     """
-    task = mongo.tasks.find_one({"task_id": task_id})
+    # 构建投影，默认排除大数据字段
+    projection = {}
+    if not include_html:
+        projection["result.html"] = 0
+    if not include_screenshot:
+        projection["result.screenshot"] = 0
+
+    task = mongo.tasks.find_one({"task_id": task_id}, projection)
 
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -56,6 +67,9 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         url=task["url"],
         node_id=task.get("node_id"),
         status=task["status"],
+        params=task.get("params"),
+        priority=task.get("priority"),
+        cache=task.get("cache"),
         result=task.get("result"),
         error=task.get("error"),
         cached=task.get("cached", False),
@@ -101,16 +115,19 @@ async def list_tasks(
 
     # 查询任务列表，只返回指定字段
     projection = {
-        "task_id": 1,
-        "url": 1,
-        "status": 1,
-        "cached": 1,
-        "node_id": 1,
-        "created_at": 1,
-        "updated_at": 1,
-        "completed_at": 1,
-        "result.metadata.load_time": 1
-    }
+            "task_id": 1,
+            "url": 1,
+            "params": 1,
+            "priority": 1,
+            "cache": 1,
+            "status": 1,
+            "cached": 1,
+            "node_id": 1,
+            "created_at": 1,
+            "updated_at": 1,
+            "completed_at": 1,
+            "result.metadata.load_time": 1
+        }
     tasks = mongo.tasks.find(query, projection).sort("created_at", -1).skip(skip).limit(limit)
 
     return {
@@ -119,6 +136,9 @@ async def list_tasks(
             {
                 "task_id": task["task_id"],
                 "url": task["url"],
+                "params": task.get("params", {}),
+                "priority": task.get("priority", 1),
+                "cache": task.get("cache", {"enabled": True, "ttl": 3600}),
                 "status": task["status"],
                 "cached": task.get("cached", False),
                 "node_id": task.get("node_id"),

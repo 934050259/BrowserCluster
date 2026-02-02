@@ -82,6 +82,16 @@ class MongoDB:
         return self.db.configs
 
     @property
+    def parsing_rules(self):
+        """
+        获取解析规则集合
+
+        Returns:
+            Collection: parsing_rules 集合
+        """
+        return self.db.parsing_rules
+
+    @property
     def nodes(self):
         """
         获取节点集合

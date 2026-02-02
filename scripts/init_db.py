@@ -39,6 +39,10 @@ if __name__ == "__main__":
     # 创建 nodes 集合索引
     mongo.nodes.create_index("node_id", unique=True)  # 节点 ID 唯一索引
 
+    # 创建 parsing_rules 集合索引
+    mongo.parsing_rules.drop_indexes() # 先清除旧索引
+    mongo.parsing_rules.create_index("domain", unique=True)  # 域名唯一索引，一个域名只能有一条规则
+
     print("Database indexes created successfully!")
 
     # 关闭数据库连接

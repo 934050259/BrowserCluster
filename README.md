@@ -11,7 +11,9 @@
 - **高效缓存**：基于 Redis 的结果缓存机制，支持自定义 TTL。
 - **资源优化**：智能拦截图片、媒体资源，显著提升渲染速度。
 - **API 拦截**：支持在渲染过程中提取特定 XHR/Fetch 接口数据。
-- **可视化管理**：提供基于 Vue 3 + Element Plus 的现代化管理后台。
+- **结构化提取**：集成 GNE (General News Extractor) 、大模型 (LLM) 、自定义xpath解析，支持通过自然语言描述自动化提取指定字段。
+- **解析规则管理**：提供可视化的解析规则配置，支持 LLM 提示词、正则、XPath 及 CSS 选择器，适配不同网站结构。
+- **可视化管理**：提供基于 Vue 3 + Element Plus 的现代化管理后台，支持深色/浅色模式切换。
 
 ## 🛠️ 技术栈
 
@@ -65,7 +67,8 @@
 - **🖥️ Admin Dashboard (Vue 3)**
   - **统计监控**：实时展示任务成功率、处理时长及队列堆积情况。
   - **任务管理**：全量任务历史溯源，支持结果预览及错误日志查看。
-  - **节点管理**：监控集群 Worker 状态、负载情况及资源占用。
+  - **节点管理**：监控集群 Worker 状态、负载情况及资源占用，支持节点上下线管理。
+  - **解析规则**：可视化维护各网站的解析模板，支持在线测试规则有效性。
   - **配置管理**：动态调整浏览器并发数、超时时间及全局代理设置。
   - **用户管理**：基于角色的访问控制 (RBAC)，保障系统安全。
 
@@ -216,6 +219,8 @@ docker run -d `
 | `viewport` | object | `{"width": 1920, "height": 1080}` | 模拟的浏览器视口大小 |
 | `proxy` | object | `null` | 代理服务器配置，格式：`{"server": "...", "username": "...", "password": "..."}` |
 | `cookies` | string/object/list | `null` | 注入 Cookie。支持字符串 (`name=val;`), JSON 对象 (`{name: val}`) 或 JSON 数组 (`[{name, value, ...}]`)。自动适配主域名。 |
+| `parser` | string | `null` | 解析服务类型：`gne` (通用新闻解析), `xpath` (自定义规则), `llm` (大模型解析) |
+| `parser_config` | object | `null` | 解析配置。若为 `llm`，可配置 `{"fields": ["title", "price"]}` 指定提取字段。 |
 
 #### **请求示例**
 
@@ -288,6 +293,17 @@ docker run -d `
 | `/api/v1/tasks/{task_id}/retry` | POST | 重试失败的任务 |
 | `/api/v1/tasks/{task_id}` | DELETE | 删除指定任务 |
 | `/api/v1/tasks/batch` | DELETE | 批量删除任务 |
+
+### 5. 解析规则接口
+
+用于维护结构化提取规则。
+
+| 接口 | 方法 | 说明 |
+| :--- | :--- | :--- |
+| `/api/v1/rules` | GET | 获取解析规则列表 |
+| `/api/v1/rules` | POST | 创建新解析规则 |
+| `/api/v1/rules/{rule_id}` | PUT | 更新指定规则 |
+| `/api/v1/rules/{rule_id}` | DELETE | 删除指定规则 |
 
 ## 📄 License
 

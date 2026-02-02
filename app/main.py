@@ -23,7 +23,7 @@ if sys.platform == 'win32':
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
-from app.api import scrape, tasks, stats, admin, nodes, auth, users
+from app.api import scrape, tasks, stats, admin, nodes, auth, users, rules
 from app.db.mongo import mongo
 from app.db.redis import redis_client
 from app.core.config import settings
@@ -97,6 +97,7 @@ app.include_router(tasks.router)
 app.include_router(stats.router)
 app.include_router(admin.router)
 app.include_router(nodes.router)
+app.include_router(rules.router)
 
 
 @app.on_event("startup")

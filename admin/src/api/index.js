@@ -83,8 +83,8 @@ export const scrapeBatch = async (data) => {
   return response.data
 }
 
-export const getTask = async (taskId) => {
-  const response = await api.get(`/tasks/${taskId}`)
+export const getTask = async (taskId, params = {}) => {
+  const response = await api.get(`/tasks/${taskId}`, { params })
   return response.data
 }
 
@@ -95,6 +95,32 @@ export const getTasks = async (params) => {
 
 export const deleteTask = async (taskId) => {
   const response = await api.delete(`/tasks/${taskId}`)
+  return response.data
+}
+
+// Rules API
+export const getRules = async () => {
+  const response = await api.get('/rules/')
+  return response.data
+}
+
+export const getRulesByDomain = async (domain) => {
+  const response = await api.get(`/rules/domain/${domain}`)
+  return response.data
+}
+
+export const createRule = async (data) => {
+  const response = await api.post('/rules/', data)
+  return response.data
+}
+
+export const updateRule = async (ruleId, data) => {
+  const response = await api.put(`/rules/${ruleId}`, data)
+  return response.data
+}
+
+export const deleteRule = async (ruleId) => {
+  const response = await api.delete(`/rules/${ruleId}`)
   return response.data
 }
 

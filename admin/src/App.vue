@@ -35,6 +35,10 @@
             <el-icon><List /></el-icon>
             <template #title>任务管理</template>
           </el-menu-item>
+          <el-menu-item index="rules" v-if="isAdmin">
+            <el-icon><Connection /></el-icon>
+            <template #title>网站配置</template>
+          </el-menu-item>
           <el-menu-item index="stats">
             <el-icon><DataLine /></el-icon>
             <template #title>数据统计</template>

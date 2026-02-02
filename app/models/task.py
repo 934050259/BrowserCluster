@@ -26,6 +26,8 @@ class ScrapeParams(BaseModel):
     stealth: bool = True  # 是否启用反检测 (stealth)
     intercept_apis: Optional[List[str]] = None  # 要拦截的接口 URL 模式列表
     intercept_continue: bool = False  # 拦截接口后是否继续请求 (默认 False)
+    parser: Optional[str] = None  # 解析服务类型: gne, llm, xpath
+    parser_config: Optional[Dict[str, Any]] = None  # 解析配置 (例如 LLM 需要解析的字段)
 
 
 class CacheConfig(BaseModel):
@@ -53,10 +55,11 @@ class TaskMetadata(BaseModel):
 
 class ScrapedResult(BaseModel):
     """抓取结果模型"""
-    html: str  # 渲染后的 HTML
+    html: Optional[str] = None  # 渲染后的 HTML (可选，支持字段投影优化)
     screenshot: Optional[str] = None  # 截图（base64 编码）
-    metadata: TaskMetadata  # 元数据
+    metadata: Optional[TaskMetadata] = None  # 元数据
     intercepted_apis: Optional[Dict[str, List[Dict[str, Any]]]] = None  # 拦截到的接口数据
+    parsed_data: Optional[Dict[str, Any]] = None  # HTML 解析后的结构化数据
 
 
 class TaskError(BaseModel):
@@ -96,6 +99,9 @@ class TaskResponse(BaseModel):
     url: str  # 目标 URL
     node_id: Optional[str] = None  # 处理节点 ID
     status: str  # 任务状态
+    params: Optional[Dict[str, Any]] = None  # 抓取参数
+    priority: Optional[int] = 1  # 优先级
+    cache: Optional[Dict[str, Any]] = None  # 缓存配置
     result: Optional[ScrapedResult] = None  # 抓取结果
     error: Optional[TaskError] = None  # 错误信息
     cached: bool = False  # 是否来自缓存

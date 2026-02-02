@@ -16,6 +16,11 @@ pymongo==4.15.5
 redis==7.1.0
 pika==1.3.2
 
+# 解析与大模型
+gne==0.1.3
+openai==1.55.3
+lxml==5.1.0
+
 # 网络请求与 API
 httpx==0.28.1
 requests==2.32.5

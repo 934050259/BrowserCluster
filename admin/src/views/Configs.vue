@@ -62,7 +62,7 @@
         class="modern-table"
         :header-cell-style="{ background: '#f8fafc', color: '#475569', fontWeight: '600', height: '50px' }"
       >
-        <el-table-column prop="key" label="配置键 (Key)" width="320">
+        <el-table-column prop="key" label="配置键 (Key)" width="350">
           <template #default="{ row }">
             <div class="key-wrapper">
               <div class="key-icon-bg" :class="{ 'is-schema': row.isSchema && !row.isDynamic }">
