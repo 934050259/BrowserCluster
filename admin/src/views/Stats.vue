@@ -15,12 +15,21 @@
               </div>
             </div>
           </div>
-          <div class="card-footer" v-if="item.trend">
-            <span class="trend" :class="item.trend > 0 ? 'up' : 'down'">
-              {{ item.trend > 0 ? '+' : '' }}{{ item.trend }}% 
-              <el-icon><CaretTop v-if="item.trend > 0" /><CaretBottom v-else /></el-icon>
-            </span>
-            <span class="tip">较昨日</span>
+          <div class="card-footer">
+            <template v-if="item.trend !== undefined">
+              <span class="trend" :class="item.trend > 0 ? (item.type === 'danger' ? 'down' : 'up') : (item.trend < 0 ? (item.type === 'danger' ? 'up' : 'down') : 'neutral')">
+                {{ item.trend > 0 ? '+' : '' }}{{ item.trend }}% 
+                <el-icon v-if="item.trend !== 0">
+                  <CaretTop v-if="item.trend > 0" />
+                  <CaretBottom v-else />
+                </el-icon>
+              </span>
+              <span class="tip">较昨日</span>
+            </template>
+            <template v-else>
+              <span class="trend neutral">0%</span>
+              <span class="tip">较昨日</span>
+            </template>
           </div>
         </el-card>
       </el-col>
@@ -38,11 +47,11 @@
               </el-radio-group>
             </div>
           </template>
-          <div ref="chartRef" style="height: 380px;"></div>
+          <div ref="chartRef" style="height: 480px;"></div>
         </el-card>
       </el-col>
       <el-col :span="8">
-        <el-card shadow="hover" header="实时队列状态" class="queue-card-main">
+        <el-card shadow="hover" header="实时队列状态" class="queue-card-main full-height-card">
           <div class="queue-summary">
             <div class="total-queue">
               <div class="val">{{ totalQueue }}</div>
@@ -265,6 +274,7 @@ onUnmounted(() => {
 
 .trend.up { color: #67c23a; }
 .trend.down { color: #f56c6c; }
+.trend.neutral { color: #909399; }
 
 .tip { color: #c0c4cc; }
 
@@ -276,6 +286,20 @@ onUnmounted(() => {
   border-radius: 12px;
   border: none;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.full-height-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.full-height-card :deep(.el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding: 30px 20px !important;
 }
 
 .card-header {
@@ -307,7 +331,7 @@ onUnmounted(() => {
 .queue-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
 }
 
 .queue-item .q-info {
