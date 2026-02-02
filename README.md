@@ -215,6 +215,7 @@ docker run -d `
 | `intercept_continue` | bool | `false` | 拦截接口后是否继续请求（默认 False 为中止请求） |
 | `viewport` | object | `{"width": 1920, "height": 1080}` | 模拟的浏览器视口大小 |
 | `proxy` | object | `null` | 代理服务器配置，格式：`{"server": "...", "username": "...", "password": "..."}` |
+| `cookies` | string/object/list | `null` | 注入 Cookie。支持字符串 (`name=val;`), JSON 对象 (`{name: val}`) 或 JSON 数组 (`[{name, value, ...}]`)。自动适配主域名。 |
 
 #### **请求示例**
 
@@ -226,6 +227,7 @@ docker run -d `
     "screenshot": true,
     "block_images": true,
     "stealth": true,
+    "cookies": "name=value; session=123",
     "intercept_apis": ["/api/v1/data/.*"],
     "proxy": {
       "server": "http://proxy.example.com:8080"

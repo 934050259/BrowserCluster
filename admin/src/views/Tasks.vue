@@ -16,7 +16,10 @@
             >
               <el-icon><DeleteFilled /></el-icon> 批量删除 ({{ selectedTasks.length }})
             </el-button>
-            <el-button type="primary" @click="showScrapeDialog = true">
+            <el-button type="success" plain @click="openBatchScrapeDialog">
+              <el-icon><Document /></el-icon> 批量导入
+            </el-button>
+            <el-button type="primary" @click="openSingleScrapeDialog">
               <el-icon><Plus /></el-icon> 新建任务
             </el-button>
             <el-button @click="loadTasks" :loading="loading">
@@ -238,13 +241,58 @@
                   <span class="main-title">目标配置</span>
                   <span class="sub-title">设置抓取地址与优先级</span>
                 </div>
+                <div class="header-extra">
+                  <el-radio-group v-model="submitMode" size="small">
+                    <el-radio-button label="single">单条</el-radio-button>
+                    <el-radio-button label="batch">批量</el-radio-button>
+                  </el-radio-group>
+                </div>
               </div>
             </template>
-            <el-form-item label="目标 URL" required>
-              <el-input v-model="scrapeForm.url" placeholder="https://example.com" clearable>
-                <template #prefix><el-icon><Connection /></el-icon></template>
-              </el-input>
-            </el-form-item>
+            
+            <div v-if="submitMode === 'single'">
+              <el-form-item label="目标 URL" required>
+                <el-input v-model="scrapeForm.url" placeholder="https://example.com" clearable>
+                  <template #prefix><el-icon><Connection /></el-icon></template>
+                </el-input>
+              </el-form-item>
+            </div>
+            
+            <div v-else class="batch-input-area">
+              <el-tabs v-model="batchMode" class="compact-tabs">
+                <el-tab-pane label="文本输入" name="text">
+                  <el-form-item label="URL 列表 (每行一个)">
+                    <el-input
+                      v-model="batchUrlsText"
+                      type="textarea"
+                      :rows="4"
+                      placeholder="https://example.com/1&#10;https://example.com/2"
+                    />
+                  </el-form-item>
+                </el-tab-pane>
+                <el-tab-pane label="文件上传" name="file">
+                  <el-form-item label="上传 TXT/CSV 文件">
+                    <el-upload
+                      class="bento-upload"
+                      drag
+                      action="#"
+                      :auto-upload="false"
+                      :on-change="handleFileChange"
+                      :on-remove="handleFileRemove"
+                      :limit="1"
+                      accept=".txt,.csv"
+                    >
+                      <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+                      <div class="el-upload__text">拖拽文件或 <em>点击上传</em></div>
+                    </el-upload>
+                  </el-form-item>
+                </el-tab-pane>
+              </el-tabs>
+              <div class="batch-count-tip" v-if="batchUrlCount > 0">
+                已识别 <span class="count">{{ batchUrlCount }}</span> 个有效 URL
+              </div>
+            </div>
+
             <el-row :gutter="15">
               <el-col :span="14">
                 <el-form-item label="任务优先级">
@@ -531,10 +579,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right } from '@element-plus/icons-vue'
-import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch } from '../api'
+import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right, Document, UploadFilled } from '@element-plus/icons-vue'
+import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch, scrapeBatch } from '../api'
 import dayjs from 'dayjs'
 
 const loading = ref(false)
@@ -596,6 +644,54 @@ const resetFilter = () => {
 
 const showScrapeDialog = ref(false)
 const showTaskDialog = ref(false)
+
+// 打开对话框的便捷方法
+const openSingleScrapeDialog = () => {
+  submitMode.value = 'single'
+  showScrapeDialog.value = true
+}
+
+const openBatchScrapeDialog = () => {
+  submitMode.value = 'batch'
+  showScrapeDialog.value = true
+}
+
+// 批量提交相关状态
+const submitMode = ref('single') // 'single' | 'batch'
+const batchMode = ref('text') // 'text' | 'file'
+const batchUrlsText = ref('')
+const batchFileUrls = ref([])
+
+// 计算有效 URL 数量
+const batchUrlCount = computed(() => {
+  if (batchMode.value === 'text') {
+    return batchUrlsText.value.split('\n').filter(url => url.trim().startsWith('http')).length
+  }
+  return batchFileUrls.value.length
+})
+
+// 处理文件读取
+const handleFileChange = (file) => {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const content = e.target.result
+    const urls = content.split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.startsWith('http'))
+    batchFileUrls.value = urls
+    if (urls.length === 0) {
+      ElMessage.warning('未在文件中找到有效的 URL (需以 http 开头)')
+    } else {
+      ElMessage.success(`成功解析 ${urls.length} 个 URL`)
+    }
+  }
+  reader.readAsText(file.raw)
+}
+
+const handleFileRemove = () => {
+  batchFileUrls.value = []
+}
+
 const scrapeForm = ref({
   url: '',
   params: {
@@ -734,69 +830,84 @@ const viewTask = async (task) => {
 }
 
 const submitTask = async () => {
-  if (!scrapeForm.value.url) {
+  // 验证输入
+  if (submitMode.value === 'single' && !scrapeForm.value.url) {
     ElMessage.warning('请输入目标 URL')
+    return
+  }
+  if (submitMode.value === 'batch' && batchUrlCount.value === 0) {
+    ElMessage.warning('请提供有效的 URL 列表')
     return
   }
 
   loading.value = true
   try {
-    // 深度克隆表单数据，避免修改原始数据
-    const submitData = JSON.parse(JSON.stringify(scrapeForm.value))
+    // 深度克隆表单数据
+    const baseConfig = JSON.parse(JSON.stringify(scrapeForm.value))
     
-    // 处理可选参数：如果为空则设置为 null，以匹配后端 Optional 类型
-    if (!submitData.params.user_agent) {
-      submitData.params.user_agent = null
-    }
-    if (!submitData.params.selector) {
-      submitData.params.selector = null
-    }
-    
-    // 代理配置处理
-    if (!submitData.params.proxy || !submitData.params.proxy.server) {
-      submitData.params.proxy = null
-    } else {
-      // 如果 server 存在但用户名/密码为空，也清理一下
-      if (!submitData.params.proxy.username) delete submitData.params.proxy.username
-      if (!submitData.params.proxy.password) delete submitData.params.proxy.password
-    }
-    
-    // 拦截配置处理
-    if (!submitData.params.intercept_apis || submitData.params.intercept_apis.length === 0) {
-      submitData.params.intercept_apis = null
+    // 统一处理参数格式
+    const processParams = (data) => {
+      if (!data.params.user_agent) data.params.user_agent = null
+      if (!data.params.selector) data.params.selector = null
+      
+      if (!data.params.proxy || !data.params.proxy.server) {
+        data.params.proxy = null
+      } else {
+        if (!data.params.proxy.username) delete data.params.proxy.username
+        if (!data.params.proxy.password) delete data.params.proxy.password
+      }
+      
+      if (!data.params.intercept_apis || data.params.intercept_apis.length === 0) {
+        data.params.intercept_apis = null
+      }
+
+      if (data.params.cookies) {
+        const cookieVal = data.params.cookies.trim()
+        if ((cookieVal.startsWith('[') && cookieVal.endsWith(']')) || 
+            (cookieVal.startsWith('{') && cookieVal.endsWith('}'))) {
+          try {
+            data.params.cookies = JSON.parse(cookieVal)
+          } catch (e) {
+            console.warn('Cookies parse failed, using as string')
+          }
+        }
+      } else {
+        data.params.cookies = null
+      }
+      
+      if (!data.params.viewport || !data.params.viewport.width || !data.params.viewport.height) {
+        data.params.viewport = null
+      }
+      return data
     }
 
-    // Cookie 处理：尝试解析 JSON，如果失败则保持原样字符串
-    if (submitData.params.cookies) {
-      const cookieVal = submitData.params.cookies.trim()
-      // 支持 [ (数组) 或 { (对象) 开头的 JSON
-      if ((cookieVal.startsWith('[') && cookieVal.endsWith(']')) || 
-          (cookieVal.startsWith('{') && cookieVal.endsWith('}'))) {
-        try {
-          submitData.params.cookies = JSON.parse(cookieVal)
-        } catch (e) {
-          // 如果解析失败，说明不是有效的 JSON，保持为字符串
-          console.warn('Cookies looks like JSON but parse failed, using as string')
-        }
-      }
+    if (submitMode.value === 'single') {
+      const submitData = processParams(baseConfig)
+      await scrapeAsync(submitData)
+      ElMessage.success('任务提交成功 (异步)')
     } else {
-      submitData.params.cookies = null
+      // 批量处理
+      const urls = batchMode.value === 'text' 
+        ? batchUrlsText.value.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'))
+        : batchFileUrls.value
+      
+      const batchData = {
+        tasks: urls.map(url => {
+          const taskConfig = JSON.parse(JSON.stringify(baseConfig))
+          taskConfig.url = url
+          return processParams(taskConfig)
+        })
+      }
+      
+      await scrapeBatch(batchData)
+      ElMessage.success(`成功提交 ${urls.length} 个批量任务`)
     }
-    
-    // 视口配置处理：如果宽高为 0 或无效，则设为 null 使用默认值
-    if (!submitData.params.viewport || !submitData.params.viewport.width || !submitData.params.viewport.height) {
-      submitData.params.viewport = null
-    }
-    
-    await scrapeAsync(submitData)
-    ElMessage.success('任务提交成功 (异步)')
+
     showScrapeDialog.value = false
     loadTasks()
-    
-    // 重置表单
     resetForm()
   } catch (error) {
-    ElMessage.error('任务提交失败: ' + (error.response?.data?.detail || error.message))
+    ElMessage.error('提交失败: ' + (error.response?.data?.detail || error.message))
   } finally {
     loading.value = false
   }
@@ -1134,6 +1245,62 @@ onMounted(() => {
 }
 
 /* Bento 风格新建任务对话框 */
+.bento-dialog :deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 20px 24px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.header-extra {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+.batch-input-area {
+  margin-bottom: 15px;
+}
+
+.compact-tabs :deep(.el-tabs__header) {
+  margin-bottom: 10px;
+}
+
+.batch-count-tip {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: #f8fafc;
+  border-radius: 6px;
+  border-left: 4px solid #7c3aed;
+}
+
+.batch-count-tip .count {
+  font-weight: bold;
+  color: #7c3aed;
+  font-size: 15px;
+}
+
+.bento-upload :deep(.el-upload-dragger) {
+  padding: 20px 10px;
+  border: 1px dashed #e2e8f0;
+  background-color: #f8fafc;
+}
+
+.bento-upload :deep(.el-upload-dragger:hover) {
+  border-color: #7c3aed;
+}
+
+.bento-upload .el-icon--upload {
+  font-size: 40px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+.bento-upload .el-upload__text {
+  font-size: 13px;
+}
+
 .bento-dialog :deep(.el-dialog__body) {
   padding: 20px;
   background-color: #f8fafc;
