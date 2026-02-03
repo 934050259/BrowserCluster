@@ -13,7 +13,6 @@ from playwright_stealth import Stealth
 from app.core.browser import browser_manager
 from app.core.config import settings
 
-
 class Scraper:
     """网页抓取器"""
 
@@ -52,7 +51,7 @@ class Scraper:
             # 创建浏览器上下文参数
             context_options = {
                 "java_script_enabled": True,
-                "user_agent": user_agent
+                # "user_agent": user_agent
             }
             
             if proxy_config:
@@ -108,8 +107,8 @@ class Scraper:
                 await page.set_viewport_size(params["viewport"])
 
             # 注入反检测脚本
-            if params.get("stealth", settings.stealth_mode):
-                await Stealth().apply_stealth_async(page)
+            # if params.get("stealth", settings.stealth_mode):
+                # await Stealth().apply_stealth_async(page)
 
             # 设置接口拦截
             intercept_apis = params.get("intercept_apis", [])
