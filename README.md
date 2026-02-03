@@ -1,8 +1,7 @@
 # Browser Cluster
 
 > [!IMPORTANT]
-> **前期项目会有较多 bug，请大家踊跃提 issues，作者看到后第一时间更新！
-> **具体的功能可以查看FUNCTIONALITY_GUIDE.md文件**
+> **前期项目会有较多 bug，请大家踊跃提 issues，作者看到后第一时间更新！具体的功能可以查看FUNCTIONALITY_GUIDE.md文件**
 
 **Browser Cluster** 是一个高性能、分布式的浏览器自动化集群系统，基于 Playwright 和 FastAPI 构建。它支持大规模并发网页抓取、截图、PDF 生成及自动化操作，具备完善的任务调度、结果缓存和节点管理功能。
 
