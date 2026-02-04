@@ -147,8 +147,8 @@ class Scraper:
                 await page.set_viewport_size(params["viewport"])
 
             # 注入反检测脚本
-            # if params.get("stealth", settings.stealth_mode):
-                # await Stealth().apply_stealth_async(page)
+            if params.get("stealth", settings.stealth_mode):
+                await Stealth().apply_stealth_async(page)
 
             # 设置接口拦截
             intercept_apis = params.get("intercept_apis", [])
@@ -324,7 +324,7 @@ class Scraper:
                     if url_matches_pattern(request_url, pattern):
                         matched_pattern = pattern
                         break
-                print("【拦截URL】- "+ request_url)
+
                 if matched_pattern:
                     # 拦截请求，获取响应
                     try:
