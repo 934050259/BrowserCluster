@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from app.models.task import StatsResponse
 from app.db.mongo import mongo
 from app.core.auth import get_current_user
+from app.services.node_manager import node_manager
 
 router = APIRouter(prefix="/api/v1/stats", tags=["Stats"])
 
@@ -124,10 +125,33 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
     ]
     history_data = list(mongo.tasks.aggregate(history_pipeline))
 
+    # 5. 获取节点统计
+    all_nodes = await node_manager.get_all_nodes()
+    active_nodes = [n for n in all_nodes if n.get('status') == 'running']
+    
+    nodes_stats = {
+        "total": len(all_nodes),
+        "active": len(active_nodes),
+        "inactive": len(all_nodes) - len(active_nodes)
+    }
+
+    # 6. 计算系统负载 (基于活跃节点的并发占用情况)
+    system_load = 0.0
+    if active_nodes:
+        total_max_concurrent = sum(n.get('max_concurrent', 1) for n in active_nodes)
+        if total_max_concurrent > 0:
+            # 当前正在处理的任务数
+            processing_count = queue_stats["processing"]
+            system_load = round((processing_count / total_max_concurrent) * 100, 1)
+            # 负载不应超过 100% (理论上可能，但这里做个限制显示)
+            system_load = min(system_load, 100.0)
+
     return StatsResponse(
         today=today_stats,
         yesterday=yesterday_stats,
         trends=trends,
         queue=queue_stats,
-        history=history_data
+        history=history_data,
+        nodes=nodes_stats,
+        system_load=system_load
     )

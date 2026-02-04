@@ -6,9 +6,11 @@ Worker 工作进程模块
 import asyncio
 import logging
 from datetime import datetime
+from urllib.parse import urlparse
 from app.services.queue_service import rabbitmq_service
 from app.services.cache_service import cache_service
 from app.core.scraper import scraper
+from app.services.parser_service import parser_service
 from app.core.config import settings
 from app.db.mongo import mongo
 from app.db.redis import redis_client
@@ -46,6 +48,21 @@ class Worker:
         if not task_id:
             return
 
+        # 动态重载配置，确保使用最新的 LLM 等设置
+        try:
+            settings.load_from_db()
+        except Exception as e:
+            logger.warning(f"Failed to reload settings from DB: {e}")
+
+        # 检查是否需要自动解析（如果任务没有明确指定解析器）
+        if not params.get("parser"):
+            domain = urlparse(url).netloc
+            rule = mongo.parsing_rules.find_one({"domain": domain, "is_active": True})
+            if rule:
+                logger.info(f"Found matching parsing rule for domain {domain}: {rule['parser_type']}")
+                params["parser"] = rule["parser_type"]
+                params["parser_config"] = rule["parser_config"]
+
         logger.info(f"Processing task {task_id}: {url}")
         
         # 检查任务是否仍然存在于数据库中（可能已被删除）
@@ -63,6 +80,16 @@ class Worker:
             # 执行抓取
             result = await scraper.scrape(url, params, self.node_id)
 
+            # 如果抓取成功且配置了解析服务，执行解析
+            if result["status"] == "success" and params.get("parser"):
+                parser_type = params["parser"]
+                parser_config = params.get("parser_config", {})
+                html = result.get("html", "")
+                
+                logger.info(f"Parsing content for task {task_id} using {parser_type}")
+                parsed_data = await parser_service.parse(html, parser_type, parser_config)
+                result["parsed_data"] = parsed_data
+
             # 检查 Worker 是否在执行过程中被停止
             if not self.is_running:
                 logger.warning(f"Worker stopped during task {task_id}, result will be ignored")
@@ -75,10 +102,16 @@ class Worker:
 
                 # 如果启用缓存，则保存结果到缓存
                 if task_data.get("cache", {}).get("enabled"):
+                    # 构造缓存数据，包含状态和结果，与数据库结构保持一致
+                    cache_data = {
+                        "status": "success",
+                        "result": result,
+                        "completed_at": datetime.now().isoformat()
+                    }
                     await cache_service.set(
                         url,
                         params,
-                        result,
+                        cache_data,
                         task_data["cache"].get("ttl"),
                         task_id=task_id
                     )
@@ -163,6 +196,12 @@ class Worker:
         """
         self.is_running = True
         logger.info(f"Worker {self.node_id} started")
+
+        # 初始化时加载配置
+        try:
+            settings.load_from_db()
+        except Exception as e:
+            logger.warning(f"Initial settings reload failed: {e}")
 
         # 启动心跳循环
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())

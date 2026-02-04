@@ -83,8 +83,8 @@ export const scrapeBatch = async (data) => {
   return response.data
 }
 
-export const getTask = async (taskId) => {
-  const response = await api.get(`/tasks/${taskId}`)
+export const getTask = async (taskId, params = {}) => {
+  const response = await api.get(`/tasks/${taskId}`, { params })
   return response.data
 }
 
@@ -98,6 +98,32 @@ export const deleteTask = async (taskId) => {
   return response.data
 }
 
+// Rules API
+export const getRules = async () => {
+  const response = await api.get('/rules/')
+  return response.data
+}
+
+export const getRulesByDomain = async (domain) => {
+  const response = await api.get(`/rules/domain/${domain}`)
+  return response.data
+}
+
+export const createRule = async (data) => {
+  const response = await api.post('/rules/', data)
+  return response.data
+}
+
+export const updateRule = async (ruleId, data) => {
+  const response = await api.put(`/rules/${ruleId}`, data)
+  return response.data
+}
+
+export const deleteRule = async (ruleId) => {
+  const response = await api.delete(`/rules/${ruleId}`)
+  return response.data
+}
+
 export const deleteTasksBatch = async (taskIds) => {
   const response = await api.delete('/tasks/batch', { data: { task_ids: taskIds } })
   return response.data
@@ -105,6 +131,42 @@ export const deleteTasksBatch = async (taskIds) => {
 
 export const retryTask = async (taskId) => {
   const response = await api.post(`/tasks/${taskId}/retry`)
+  return response.data
+}
+
+// 定时任务相关 API
+export const getSchedules = async (params) => {
+  const response = await api.get('/schedules/', { params })
+  return response.data
+}
+
+export const getSchedule = async (scheduleId) => {
+  const response = await api.get(`/schedules/${scheduleId}`)
+  return response.data
+}
+
+export const createSchedule = async (data) => {
+  const response = await api.post('/schedules/', data)
+  return response.data
+}
+
+export const updateSchedule = async (scheduleId, data) => {
+  const response = await api.put(`/schedules/${scheduleId}`, data)
+  return response.data
+}
+
+export const deleteSchedule = async (scheduleId) => {
+  const response = await api.delete(`/schedules/${scheduleId}`)
+  return response.data
+}
+
+export const toggleSchedule = async (scheduleId) => {
+  const response = await api.post(`/schedules/${scheduleId}/toggle`)
+  return response.data
+}
+
+export const runScheduleNow = async (scheduleId) => {
+  const response = await api.post(`/schedules/${scheduleId}/run`)
   return response.data
 }
 

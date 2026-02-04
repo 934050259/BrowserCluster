@@ -14,6 +14,7 @@ from app.models.task import (
 )
 from app.services.queue_service import rabbitmq_service
 from app.services.cache_service import cache_service
+from app.services.task_service import task_service
 from app.db.mongo import mongo
 from app.core.config import settings
 from app.core.auth import get_current_user
@@ -48,6 +49,14 @@ async def scrape(request: ScrapeRequest, current_user: dict = Depends(get_curren
     if request.cache.enabled:
         cached = await cache_service.get(url, params)
         if cached:
+            # 处理缓存数据结构：老版本缓存可能直接存储 result，新版本可能包含 status 和 result 包装
+            result_data = cached.get("result") if "result" in cached else cached
+            
+            # 处理完成时间：优先使用包装层的时间，否则尝试从 metadata 中获取
+            completed_at = cached.get("completed_at")
+            if not completed_at and isinstance(result_data, dict):
+                completed_at = result_data.get("metadata", {}).get("timestamp")
+            
             # 即便是缓存命中，我们也记录一条任务记录到数据库，方便用户在列表中看到
             task_data = {
                 "task_id": task_id,
@@ -55,12 +64,12 @@ async def scrape(request: ScrapeRequest, current_user: dict = Depends(get_curren
                 "status": cached.get("status", "success"),
                 "priority": request.priority,
                 "params": params,
-                "result": cached.get("result"),
+                "result": result_data,
                 "cache_key": cache_key,
                 "cached": True,
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
-                "completed_at": cached.get("completed_at") or datetime.now()
+                "completed_at": completed_at or datetime.now()
             }
             mongo.tasks.insert_one(task_data)
 
@@ -68,6 +77,8 @@ async def scrape(request: ScrapeRequest, current_user: dict = Depends(get_curren
                 task_id=task_id,
                 url=url,
                 status=task_data["status"],
+                params=task_data["params"],
+                priority=task_data["priority"],
                 result=task_data["result"],
                 cached=True,
                 created_at=task_data["created_at"],
@@ -130,6 +141,9 @@ async def scrape(request: ScrapeRequest, current_user: dict = Depends(get_curren
                     task_id=task_id,
                     url=url,
                     status=task["status"],
+                    params=task.get("params"),
+                    priority=task.get("priority"),
+                    cache=task.get("cache"),
                     result=task.get("result"),
                     error=task.get("error"),
                     cached=False,
@@ -163,59 +177,7 @@ async def scrape_async(request: ScrapeRequest, current_user: dict = Depends(get_
     Returns:
         TaskResponse: 任务响应信息
     """
-    url = str(request.url)
-    params = request.params.model_dump()
-
-    # 生成任务 ID
-    task_id = str(ObjectId())
-    cache_key = cache_service.generate_cache_key(url, params)
-
-    # 构建任务数据
-    task_data = {
-        "task_id": task_id,
-        "url": url,
-        "status": "pending",
-        "priority": request.priority,
-        "params": params,
-        "cache": request.cache.model_dump(),
-        "cache_key": cache_key,
-        "cached": False,
-        "created_at": datetime.now(),
-        "updated_at": datetime.now()
-    }
-
-    # 保存任务到数据库
-    mongo.tasks.insert_one(task_data)
-
-    # 构建队列任务
-    queue_task = {
-        "task_id": task_id,
-        "url": url,
-        "params": params,
-        "cache": request.cache.model_dump(),
-        "priority": request.priority
-    }
-
-    # 发布任务到队列
-    if not rabbitmq_service.publish_task(queue_task):
-        mongo.tasks.update_one(
-            {"task_id": task_id},
-            {"$set": {
-                "status": "failed",
-                "error": {"message": "Failed to queue task: RabbitMQ connection issue"},
-                "updated_at": datetime.now()
-            }}
-        )
-
-    # 返回任务信息
-    return TaskResponse(
-        task_id=task_id,
-        url=url,
-        status="pending",
-        cached=False,
-        created_at=task_data["created_at"],
-        updated_at=task_data["updated_at"]
-    )
+    return await task_service.create_task(request)
 
 
 @router.post("/batch", response_model=BatchScrapeResponse)

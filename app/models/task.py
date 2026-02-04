@@ -22,10 +22,12 @@ class ScrapeParams(BaseModel):
     user_agent: Optional[str] = None  # 自定义 User-Agent
     viewport: Dict[str, int] = Field(default_factory=lambda: {"width": 1920, "height": 1080})  # 视口大小
     proxy: Optional[Dict[str, Any]] = None  # 代理配置 {server, username, password}
-    cookies: Optional[Union[str, List[Dict[str, Any]]]] = None  # Cookies, 支持 str (name=value) 或 list [dict]
+    cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None  # Cookies, 支持 str, list [dict] 或 dict {name: value}
     stealth: bool = True  # 是否启用反检测 (stealth)
     intercept_apis: Optional[List[str]] = None  # 要拦截的接口 URL 模式列表
     intercept_continue: bool = False  # 拦截接口后是否继续请求 (默认 False)
+    parser: Optional[str] = None  # 解析服务类型: gne, llm, xpath
+    parser_config: Optional[Dict[str, Any]] = None  # 解析配置 (例如 LLM 需要解析的字段)
 
 
 class CacheConfig(BaseModel):
@@ -40,6 +42,7 @@ class ScrapeRequest(BaseModel):
     params: ScrapeParams = Field(default_factory=ScrapeParams)  # 抓取参数
     cache: CacheConfig = Field(default_factory=CacheConfig)  # 缓存配置
     priority: int = 1  # 任务优先级（数字越大优先级越高）
+    schedule_id: Optional[str] = None  # 所属定时任务 ID (如果是定时任务触发的)
 
 
 class TaskMetadata(BaseModel):
@@ -53,10 +56,11 @@ class TaskMetadata(BaseModel):
 
 class ScrapedResult(BaseModel):
     """抓取结果模型"""
-    html: str  # 渲染后的 HTML
+    html: Optional[str] = None  # 渲染后的 HTML (可选，支持字段投影优化)
     screenshot: Optional[str] = None  # 截图（base64 编码）
-    metadata: TaskMetadata  # 元数据
-    intercepted_apis: Optional[Dict[str, List[Dict[str, Any]]]] = None  # 拦截到的接口数据
+    metadata: Optional[TaskMetadata] = None  # 元数据
+    intercepted_apis: Optional[Dict[str, List[Dict[str, Any]]]] = None  # 拦截到的接口数据 (键名中的 . 和 $ 已被转义为 _)
+    parsed_data: Optional[Dict[str, Any]] = None  # HTML 解析后的结构化数据
 
 
 class TaskError(BaseModel):
@@ -96,6 +100,9 @@ class TaskResponse(BaseModel):
     url: str  # 目标 URL
     node_id: Optional[str] = None  # 处理节点 ID
     status: str  # 任务状态
+    params: Optional[Dict[str, Any]] = None  # 抓取参数
+    priority: Optional[int] = 1  # 优先级
+    cache: Optional[Dict[str, Any]] = None  # 缓存配置
     result: Optional[ScrapedResult] = None  # 抓取结果
     error: Optional[TaskError] = None  # 错误信息
     cached: bool = False  # 是否来自缓存
@@ -126,3 +133,5 @@ class StatsResponse(BaseModel):
     trends: Dict[str, float]  # 趋势百分比
     queue: Dict[str, Any]  # 队列统计数据
     history: List[Dict[str, Any]]  # 历史趋势数据
+    nodes: Optional[Dict[str, Any]] = None  # 节点统计数据
+    system_load: Optional[float] = 0.0  # 系统负载 (0-100)

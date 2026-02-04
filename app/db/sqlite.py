@@ -250,10 +250,10 @@ class SQLiteDB:
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute('DELETE FROM configs WHERE key = ?', (key,))
-        rows_affected = cursor.rowcount
+        success = cursor.rowcount > 0
         conn.commit()
         conn.close()
-        return rows_affected > 0
+        return success
 
 # 全局 SQLite 实例
 sqlite_db = SQLiteDB()

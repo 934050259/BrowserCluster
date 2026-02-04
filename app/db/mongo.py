@@ -82,6 +82,16 @@ class MongoDB:
         return self.db.configs
 
     @property
+    def parsing_rules(self):
+        """
+        获取解析规则集合
+
+        Returns:
+            Collection: parsing_rules 集合
+        """
+        return self.db.parsing_rules
+
+    @property
     def nodes(self):
         """
         获取节点集合
@@ -90,6 +100,26 @@ class MongoDB:
             Collection: nodes 集合
         """
         return self.db.nodes
+
+    @property
+    def schedules(self):
+        """
+        获取定时任务集合
+
+        Returns:
+            Collection: schedules 集合
+        """
+        return self.db.schedules
+
+    @property
+    def users(self):
+        """
+        获取用户集合
+
+        Returns:
+            Collection: users 集合
+        """
+        return self.db.users
 
 
 # 全局 MongoDB 实例

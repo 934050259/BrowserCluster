@@ -6,52 +6,88 @@
     <el-container v-else class="main-container">
       <!-- Sidebar -->
       <el-aside :width="isCollapse ? '64px' : '240px'" class="sidebar">
-        <div class="logo-container">
-          <div class="logo-wrapper">
-            <svg class="logo-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <div class="logo-glow"></div>
+        <div class="sidebar-inner">
+          <div class="logo-container">
+            <div class="logo-wrapper">
+              <svg class="logo-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <div class="logo-glow"></div>
+            </div>
+            <span class="logo-text" v-if="!isCollapse">BrowserCluster</span>
           </div>
-          <span class="logo-text" v-if="!isCollapse">BrowserCluster</span>
+          
+          <div class="menu-wrapper">
+            <el-menu
+              :default-active="activeMenu"
+              class="el-menu-vertical"
+              :collapse="isCollapse"
+              @select="handleMenuSelect"
+              background-color="transparent"
+              text-color="#bfcbd9"
+              active-text-color="#409EFF"
+            >
+              <el-menu-item index="">
+                <el-icon><House /></el-icon>
+                <template #title>首页概览</template>
+              </el-menu-item>
+              
+              <div class="menu-group-title" v-if="!isCollapse">任务调度</div>
+              <el-menu-item index="tasks">
+                <el-icon><List /></el-icon>
+                <template #title>任务管理</template>
+              </el-menu-item>
+              <el-menu-item index="schedules">
+                <el-icon><Timer /></el-icon>
+                <template #title>定时任务</template>
+              </el-menu-item>
+              <el-menu-item index="rules" v-if="isAdmin">
+                <el-icon><Connection /></el-icon>
+                <template #title>网站配置</template>
+              </el-menu-item>
+
+              <div class="menu-group-title" v-if="!isCollapse">分析与统计</div>
+              <el-menu-item index="stats">
+                <el-icon><DataLine /></el-icon>
+                <template #title>数据统计</template>
+              </el-menu-item>
+
+              <div class="menu-group-title" v-if="!isCollapse">系统管理</div>
+              <el-menu-item index="nodes" v-if="isAdmin">
+                <el-icon><Monitor /></el-icon>
+                <template #title>节点管理</template>
+              </el-menu-item>
+              <el-menu-item index="users" v-if="isAdmin">
+                <el-icon><User /></el-icon>
+                <template #title>用户管理</template>
+              </el-menu-item>
+              <el-menu-item index="configs" v-if="isAdmin">
+                <el-icon><Setting /></el-icon>
+                <template #title>系统设置</template>
+              </el-menu-item>
+            </el-menu>
+          </div>
+
+          <div class="sidebar-footer" v-if="!isCollapse">
+            <div class="footer-card">
+              <div class="footer-stats">
+                <div class="stat-mini">
+                  <span class="dot" :class="stats.nodes?.active > 0 ? 'success' : 'warning'"></span>
+                  <span class="label">在线节点</span>
+                  <span class="val">{{ stats.nodes?.active || 0 }}/{{ stats.nodes?.total || 0 }}</span>
+                </div>
+                <div class="stat-mini">
+                  <span class="dot" :class="getLoadStatusClass(stats.system_load)"></span>
+                  <span class="label">系统负载</span>
+                  <span class="val">{{ stats.system_load || 0 }}%</span>
+                </div>
+              </div>
+              <div class="version-info">v1.2.0 Stable</div>
+            </div>
+          </div>
         </div>
-        
-        <el-menu
-          :default-active="activeMenu"
-          class="el-menu-vertical"
-          :collapse="isCollapse"
-          @select="handleMenuSelect"
-          background-color="#304156"
-          text-color="#bfcbd9"
-          active-text-color="#409EFF"
-        >
-          <el-menu-item index="">
-            <el-icon><House /></el-icon>
-            <template #title>首页</template>
-          </el-menu-item>
-          <el-menu-item index="tasks">
-            <el-icon><List /></el-icon>
-            <template #title>任务管理</template>
-          </el-menu-item>
-          <el-menu-item index="stats">
-            <el-icon><DataLine /></el-icon>
-            <template #title>数据统计</template>
-          </el-menu-item>
-          <el-menu-item index="nodes" v-if="isAdmin">
-            <el-icon><Monitor /></el-icon>
-            <template #title>节点管理</template>
-          </el-menu-item>
-          <el-menu-item index="users" v-if="isAdmin">
-            <el-icon><User /></el-icon>
-            <template #title>用户管理</template>
-          </el-menu-item>
-          <el-menu-item index="configs" v-if="isAdmin">
-            <el-icon><Setting /></el-icon>
-            <template #title>系统设置</template>
-          </el-menu-item>
-        </el-menu>
       </el-aside>
 
       <el-container class="content-container">
@@ -69,6 +105,20 @@
           </div>
           
           <div class="header-right">
+            <div class="header-actions">
+              <el-tooltip content="刷新统计" placement="bottom">
+                <el-icon class="action-btn" @click="refreshStats"><Refresh /></el-icon>
+              </el-tooltip>
+              <el-tooltip content="全屏" placement="bottom">
+                <el-icon class="action-btn" @click="toggleFullscreen"><FullScreen /></el-icon>
+              </el-tooltip>
+              <el-tooltip content="帮助文档" placement="bottom">
+                <el-icon class="action-btn" @click="openDocs"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </div>
+            
+            <el-divider direction="vertical" />
+            
             <div class="stats-overview">
               <el-tooltip content="今日任务统计" placement="bottom">
                 <div class="stats-card-mini">
@@ -132,7 +182,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   House, List, DataLine, Monitor, Setting, User,
-  Expand, Fold, CircleCheck, CircleClose 
+  Expand, Fold, CircleCheck, CircleClose, Refresh,
+  QuestionFilled, FullScreen
 } from '@element-plus/icons-vue'
 import { useStatsStore } from './stores/stats'
 import { useAuthStore } from './stores/auth'
@@ -159,6 +210,9 @@ const currentRouteName = computed(() => {
   if (path === '/') return '概览'
   const names = {
     '/tasks': '任务管理',
+    '/task-records': '采集记录',
+    '/rules': '网站配置',
+    '/schedules': '定时任务',
     '/stats': '数据统计',
     '/nodes': '节点管理',
     '/configs': '系统设置',
@@ -166,6 +220,24 @@ const currentRouteName = computed(() => {
   }
   return names[path] || '未知'
 })
+
+const refreshStats = () => {
+  statsStore.fetchStats()
+}
+
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen()
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen()
+    }
+  }
+}
+
+const openDocs = () => {
+  window.open('https://github.com/934050259/BrowserCluster', '_blank')
+}
 
 const handleMenuSelect = (index) => {
   router.push('/' + index)
@@ -188,6 +260,12 @@ const getStatusColor = (success, total) => {
 const calculateSuccessRate = (success, total) => {
   if (!total) return 0
   return (success / total) * 100
+}
+
+const getLoadStatusClass = (load) => {
+  if (load > 80) return 'danger'
+  if (load > 50) return 'warning'
+  return 'success'
 }
 
 const handleCommand = (command) => {
@@ -226,75 +304,146 @@ body {
 /* Sidebar Styles */
 .sidebar {
   background-color: #304156;
-  height: 100%;
+  color: #fff;
   transition: width 0.3s;
   overflow: hidden;
   box-shadow: 2px 0 6px rgba(0, 21, 41, 0.35);
   z-index: 1001;
 }
 
+.sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.menu-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none; /* Firefox */
+}
+
+.menu-wrapper::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
 .logo-container {
   height: 64px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  background-color: #2b2f3a;
-  color: white;
   padding: 0 16px;
+  background: #2b3b4d;
   overflow: hidden;
-  gap: 12px;
+  white-space: nowrap;
 }
 
 .logo-wrapper {
   position: relative;
   width: 32px;
   height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin-right: 12px;
   flex-shrink: 0;
 }
 
 .logo-svg {
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  height: 100%;
   color: #409EFF;
-  z-index: 2;
-  filter: drop-shadow(0 0 8px rgba(64, 158, 255, 0.4));
-  animation: logo-float 3s ease-in-out infinite;
 }
 
 .logo-glow {
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 20px;
   height: 20px;
-  background: #409EFF;
-  filter: blur(15px);
-  opacity: 0.5;
-  z-index: 1;
-}
-
-@keyframes logo-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+  background: rgba(64, 158, 255, 0.4);
+  filter: blur(10px);
+  border-radius: 50%;
+  z-index: -1;
 }
 
 .logo-text {
   font-size: 18px;
-  font-weight: 700;
-  white-space: nowrap;
-  background: linear-gradient(135deg, #fff 0%, #409EFF 100%);
+  font-weight: bold;
+  background: linear-gradient(120deg, #fff, #409EFF);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: 0.5px;
+}
+
+.menu-group-title {
+  padding: 16px 12px 8px;
+  font-size: 12px;
+  color: #e2ebf0;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 300;
+  opacity: 0.8;
 }
 
 .el-menu-vertical {
-  border: none !important;
+  border-right: none;
 }
 
-.el-menu-vertical:not(.el-menu--collapse) {
-  width: 240px;
+.el-menu-item {
+  height: 50px;
+  line-height: 50px;
+}
+
+.el-menu-item:hover {
+  background-color: #263445 !important;
+}
+
+.el-menu-item.is-active {
+  background-color: #1f2d3d !important;
+}
+
+.sidebar-footer {
+  padding: 16px;
+  background: #2b3b4d;
+}
+
+.footer-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.footer-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.stat-mini {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #bfcbd9;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.dot.success { background: #67C23A; box-shadow: 0 0 5px #67C23A; }
+.dot.warning { background: #E6A23C; box-shadow: 0 0 5px #E6A23C; }
+.dot.danger { background: #F56C6C; box-shadow: 0 0 5px #F56C6C; }
+
+.label { flex: 1; }
+.val { color: #fff; font-family: monospace; }
+
+.version-info {
+  font-size: 10px;
+  color: #c6cdd6;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 8px;
 }
 
 /* Header Styles */
@@ -328,6 +477,26 @@ body {
   display: flex;
   align-items: center;
   gap: 15px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.action-btn {
+  font-size: 18px;
+  color: #606266;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: all 0.3s;
+}
+
+.action-btn:hover {
+  background-color: #f5f7fa;
+  color: #409EFF;
 }
 
 .stats-overview {

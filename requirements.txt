@@ -15,6 +15,13 @@ playwright-stealth==2.0.1
 pymongo==4.15.5
 redis==7.1.0
 pika==1.3.2
+motor==3.7.1
+
+# 解析与大模型
+# gne==0.1.3  # 可选依赖，如在老旧 CentOS 环境安装失败可注释
+gne==0.1.3
+openai==1.55.3
+lxml==5.1.0
 
 # 网络请求与 API
 httpx==0.28.1
@@ -22,10 +29,10 @@ requests==2.32.5
 python-multipart==0.0.20
 
 # 安全与加密
-python-jose==3.5.0
-passlib==1.7.4
-bcrypt==3.2.2
-cryptography==46.0.3
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+cryptography==44.0.0
 
-# 其他工具
-motor==3.7.1
+# 定时任务
+apscheduler==3.11.0

@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     heartbeat_interval: int = 30  # 心跳间隔（秒）
     max_node_auto_retries: int = 5  # 节点自动重启最大重试次数
 
+    # 大模型解析配置
+    llm_api_base: str = "https://api.openai.com/v1"  # LLM API 基础地址
+    llm_api_key: str = ""  # LLM API 密钥
+    llm_model: str = "gpt-3.5-turbo"  # LLM 模型名称
+
     # 日志配置
     log_level: str = "INFO"  # 日志级别
     log_file: str = "logs/app.log"  # 日志文件路径

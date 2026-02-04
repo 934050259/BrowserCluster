@@ -63,8 +63,8 @@
         <div class="arch-step">
           <div class="step-card">
             <div class="step-icon"><Connection /></div>
-            <h4>Unified Gateway</h4>
-            <p>基于 FastAPI 的高性能异步接口，提供鉴权、流控与任务调度入口。</p>
+            <h4>API Gateway</h4>
+            <p>鉴权、流控与请求预检，集成缓存优先策略。</p>
           </div>
         </div>
         <div class="arch-connector">
@@ -74,7 +74,7 @@
           <div class="step-card">
             <div class="step-icon"><Operation /></div>
             <h4>Task Queue</h4>
-            <p>RabbitMQ 实现任务削峰填谷，确保高并发下的系统稳定性与可靠投递。</p>
+            <p>RabbitMQ 异步分发，支持优先级调度与消息持久化。</p>
           </div>
         </div>
         <div class="arch-connector">
@@ -83,8 +83,8 @@
         <div class="arch-step">
           <div class="step-card">
             <div class="step-icon"><Cpu /></div>
-            <h4>Browser Cluster</h4>
-            <p>分布式 Playwright 节点，支持隐身模式、指纹混淆与动态扩缩容。</p>
+            <h4>Smart Worker</h4>
+            <p>Playwright 渲染引擎，内置 GNE/XPath/LLM 多模态解析。</p>
           </div>
         </div>
         <div class="arch-connector">
@@ -93,8 +93,8 @@
         <div class="arch-step">
           <div class="step-card">
             <div class="step-icon"><Files /></div>
-            <h4>Data Persistence</h4>
-            <p>MongoDB 存储完整任务链路，Redis 提供毫秒级结果缓存与状态同步。</p>
+            <h4>Persistence</h4>
+            <p>MongoDB 结果存储与 Redis 热点数据缓存。</p>
           </div>
         </div>
       </div>
@@ -125,25 +125,25 @@ const features = [
     bg: '#ecf5ff'
   },
   {
-    title: '隐身渲染',
-    desc: '内置 Stealth 插件，有效绕过反爬虫检测与人机验证。',
+    title: '多模式解析',
+    desc: '集成 GNE、XPath 与 LLM 大模型，支持从零配置到语义化的结构化数据提取。',
     icon: MagicStick,
     color: '#67C23A',
     bg: '#f0f9eb'
   },
   {
     title: '高效缓存',
-    desc: '基于 Redis 的结果缓存机制，大幅降低重复抓取成本。',
+    desc: '基于 Redis 的结果缓存机制，支持自定义过期时间与自动清理。',
     icon: Timer,
     color: '#E6A23C',
     bg: '#fdf6ec'
   },
   {
     title: 'API 拦截',
-    desc: '支持在页面渲染过程中拦截并提取特定接口的数据。',
-    icon: Lock,
-    color: '#F56C6C',
-    bg: '#fef0f0'
+    desc: '支持在页面渲染过程中拦截并提取特定 XHR/Fetch 接口数据。',
+    icon: Connection,
+    color: '#409EFF',
+    bg: '#ecf5ff'
   },
   {
     title: '多维监控',
@@ -310,7 +310,7 @@ const openDocs = () => {
 /* Architecture Section */
 .architecture-section {
   margin-top: 100px;
-  padding: 80px 0;
+  padding: 20px 0;
   background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
   position: relative;
   overflow: hidden;
@@ -320,7 +320,7 @@ const openDocs = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 60px;
+  margin: 60px;
   position: relative;
   max-width: 1000px;
   margin-left: auto;
