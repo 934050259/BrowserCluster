@@ -544,6 +544,10 @@
                 </el-col>
               </el-row>
 
+              <el-form-item label="额外等待时间（ms）">
+                <el-input-number v-model="scrapeForm.params.wait_time" :min="0" :step="100" style="width: 100%" />
+              </el-form-item>
+
               <el-form-item label="视口尺寸 (分辨率)">
                 <div class="viewport-input">
                   <el-input-number v-model="scrapeForm.params.viewport.width" :min="320" placeholder="宽度" controls-position="right" />
@@ -637,17 +641,6 @@
                   </el-form-item>
                 </el-col>
               </el-row>
-
-              <div class="section-title">API 拦截配置</div>
-              <el-form-item label="拦截 API 模式">
-                <el-input
-                  v-model="interceptApisText"
-                  type="textarea"
-                  :rows="4"
-                  placeholder="输入 API 路径模式，每行一个，例如：\n/api/data\n/users/*\n/products/[0-9]+"
-                />
-                <div class="input-tip">支持通配符 * 和正则表达式</div>
-              </el-form-item>
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -1312,7 +1305,6 @@ const submitMode = ref('single') // 'single' | 'batch'
 const batchMode = ref('text') // 'text' | 'file'
 const batchUrlsText = ref('')
 const batchFileUrls = ref([])
-const interceptApisText = ref('')
 
 // 解析配置相关状态
 const llmFieldOptions = [
@@ -1638,13 +1630,6 @@ const copyTask = async (task) => {
       ]
     }
     
-    // 处理API拦截配置
-    if (scrapeForm.value.params.intercept_apis && Array.isArray(scrapeForm.value.params.intercept_apis)) {
-      interceptApisText.value = scrapeForm.value.params.intercept_apis.join('\n')
-    } else {
-      interceptApisText.value = ''
-    }
-    
     activeConfigTab.value = 'basic'
     showScrapeDialog.value = true
     ElMessage.success('任务配置已复制到新建任务表单')
@@ -1774,16 +1759,6 @@ const submitTask = async () => {
         if (!data.params.proxy.username) delete data.params.proxy.username
         if (!data.params.proxy.password) delete data.params.proxy.password
       }
-      
-      // 处理API拦截配置
-      if (interceptApisText.value.trim()) {
-        data.params.intercept_apis = interceptApisText.value
-          .split('\n')
-          .map(line => line.trim())
-          .filter(line => line)
-      } else if (!data.params.intercept_apis || data.params.intercept_apis.length === 0) {
-        data.params.intercept_apis = null
-      }
 
       if (data.params.cookies) {
         const cookieVal = data.params.cookies.trim()
@@ -1883,7 +1858,6 @@ const resetForm = () => {
     { field: 'title', path: '//h1' },
     { field: 'content', path: "//div[@class='article-body']" }
   ]
-  interceptApisText.value = ''
   lastCheckedDomain = ''
   matchedRules.value = []
   activeConfigTab.value = 'basic'

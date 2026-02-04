@@ -320,12 +320,11 @@ class Scraper:
                 # 检查请求 URL 是否匹配任何拦截模式
                 request_url = request.url
                 matched_pattern = None
-
                 for pattern in api_patterns:
                     if url_matches_pattern(request_url, pattern):
                         matched_pattern = pattern
                         break
-
+                print("【拦截URL】- "+ request_url)
                 if matched_pattern:
                     # 拦截请求，获取响应
                     try:
