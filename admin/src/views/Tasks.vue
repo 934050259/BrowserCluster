@@ -532,8 +532,14 @@
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
-                  <el-form-item label="渲染超时 (ms)">
-                    <el-input-number v-model="scrapeForm.params.timeout" :min="5000" :step="5000" style="width: 100%" />
+                  <el-form-item label="渲染超时 (s)">
+                    <el-input-number 
+                      :model-value="scrapeForm.params.timeout / 1000" 
+                      @update:model-value="val => scrapeForm.params.timeout = val * 1000"
+                      :min="5" 
+                      :step="5" 
+                      style="width: 100%" 
+                    />
                   </el-form-item>
                 </el-col>
               </el-row>
@@ -589,6 +595,32 @@
             </template>
             
             <div class="tab-content">
+              <div class="section-title">接口拦截配置</div>
+              <el-form-item label="拦截接口 URL 模式">
+                <el-select
+                v-model="scrapeForm.params.intercept_apis"
+                multiple
+                filterable
+                allow-create
+                :reserve-keyword="false"
+                placeholder="输入匹配模式并按回车，例如: */api/* 或 *.json"
+                style="width: 100%"
+              >
+                  <el-option label="所有 API (*api*)" value="*api*" />
+                  <el-option label="JSON 数据 (*.json)" value="*.json" />
+                </el-select>
+                <div class="input-tip">使用 * 作为通配符。开启后，系统将捕获并保存匹配接口的响应内容。</div>
+              </el-form-item>
+
+              <el-form-item label="拦截后继续请求">
+                <div class="switch-container">
+                  <el-switch v-model="scrapeForm.params.intercept_continue" />
+                  <span class="switch-tip">{{ scrapeForm.params.intercept_continue ? '开启 (正常加载页面)' : '关闭 (拦截并停止, 节省流量)' }}</span>
+                </div>
+              </el-form-item>
+
+              <el-divider />
+
               <div class="section-title">代理配置</div>
               <el-form-item label="代理服务器">
                 <el-input v-model="scrapeForm.params.proxy.server" placeholder="http://proxy.example.com:8080" clearable />

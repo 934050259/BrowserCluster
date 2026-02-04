@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # 安全配置
     secret_key: str = "your-secret-key-here"  # 应该在 .env 中设置
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60 * 24  # 24小时
+    access_token_expire_minutes: int = 60 * 24 * 7  # 7天
 
     class Config:
         """Pydantic 配置类"""

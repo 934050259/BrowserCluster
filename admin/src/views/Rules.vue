@@ -97,7 +97,7 @@
                   multiple
                   filterable
                   allow-create
-                  default-first-option
+                  :reserve-keyword="false"
                   placeholder="选择或输入需要提取的字段"
                   style="width: 100%"
                   @change="handleLlmFieldsChange"

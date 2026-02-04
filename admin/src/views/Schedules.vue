@@ -365,6 +365,32 @@
             
             <div class="tab-content">
               <div v-if="form.params">
+                <div class="section-title">接口拦截配置</div>
+                <el-form-item label="拦截接口 URL 模式">
+                  <el-select
+                  v-model="form.params.intercept_apis"
+                  multiple
+                  filterable
+                  allow-create
+                  :reserve-keyword="false"
+                  placeholder="输入匹配模式并按回车，例如: */api/* 或 *.json"
+                  style="width: 100%"
+                >
+                    <el-option label="所有 API (*api*)" value="*api*" />
+                    <el-option label="JSON 数据 (*.json)" value="*.json" />
+                  </el-select>
+                  <div class="input-tip">使用 * 作为通配符。开启后，系统将捕获并保存匹配接口的响应内容。</div>
+                </el-form-item>
+
+                <el-form-item label="拦截后继续请求">
+                  <div class="switch-container">
+                    <el-switch v-model="form.params.intercept_continue" />
+                    <span class="switch-tip">{{ form.params.intercept_continue ? '开启 (正常加载页面)' : '关闭 (拦截并停止, 节省流量)' }}</span>
+                  </div>
+                </el-form-item>
+
+                <el-divider />
+
                 <div class="section-title">代理配置</div>
                 <el-form-item label="代理服务器" v-if="form.params.proxy">
                   <el-input v-model="form.params.proxy.server" placeholder="http://proxy.example.com:8080" clearable />
@@ -727,6 +753,8 @@ const openCreateDialog = () => {
       cookies: '',
       stealth: true,
       block_images: false,
+      intercept_apis: [],
+      intercept_continue: false,
       proxy: {
         server: '',
         username: '',
@@ -782,8 +810,16 @@ const handleEdit = (row) => {
       cookies: '',
       stealth: true,
       block_images: false,
+      intercept_apis: [],
+      intercept_continue: false,
       proxy: { server: '', username: '', password: '' }
     }
+  }
+  if (!form.value.params.intercept_apis) {
+    form.value.params.intercept_apis = []
+  }
+  if (form.value.params.intercept_continue === undefined) {
+    form.value.params.intercept_continue = false
   }
   if (!form.value.cache) {
     form.value.cache = { enabled: false, ttl: 3600 }
@@ -857,6 +893,11 @@ const handleSubmit = async () => {
         } else {
           if (!submitData.params.proxy.username) delete submitData.params.proxy.username
           if (!submitData.params.proxy.password) delete submitData.params.proxy.password
+        }
+
+        // 处理拦截配置
+        if (!submitData.params.intercept_apis || submitData.params.intercept_apis.length === 0) {
+          submitData.params.intercept_apis = null
         }
 
         // 处理 Cookies
