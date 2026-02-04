@@ -143,11 +143,13 @@ class BrowserManager:
         检查浏览器是否长时间空闲，如果是则关闭浏览器，释放内存
         """
         if self._browser and self._browser.is_connected():
+            # 如果还有打开的上下文或页面，可能不应该直接关闭整个浏览器
+            # 但为了简单释放内存，这里按照闲置时间逻辑处理
             current_time = time.time()
             idle_time = current_time - self._last_used_time
             
             if idle_time > settings.browser_idle_timeout:
-                logger.info(f"Browser has been idle for {idle_time:.1f} seconds, closing to free memory")
+                logger.info(f"Playwright browser idle for {int(idle_time)}s, closing...")
                 await self.close_browser()
 
     async def close_browser(self):

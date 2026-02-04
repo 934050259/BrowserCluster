@@ -106,6 +106,8 @@ class DrissionManager:
             co.set_argument('--no-first-run')
             co.set_argument('--no-default-browser-check')
             co.set_argument('--ignore-certificate-errors')
+            # 设置默认窗口大小
+            co.set_argument('--window-size=1920,1080')
             # co.incognito() # 无痕模式
             
             # 禁用下载管理器以避免部分环境下的初始化错误 (_dl_mgr 报错)
@@ -140,6 +142,12 @@ class DrissionManager:
                     logger.error(f"Error closing DrissionPage: {e}")
                 finally:
                     self._page = None
+
+    @property
+    def is_active(self) -> bool:
+        """检查浏览器是否处于激活/打开状态"""
+        with self._lock:
+            return self._page is not None
 
     @property
     def last_used_time(self):

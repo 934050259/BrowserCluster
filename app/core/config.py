@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     default_viewport_width: int = 1920  # 默认视口宽度
     default_viewport_height: int = 1080  # 默认视口高度
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"  # 默认 User-Agent
-    browser_idle_timeout: int = 300  # 浏览器空闲超时时间（秒），默认5分钟
+    browser_idle_timeout: int = 1800  # 浏览器空闲超时时间（秒），默认30分钟
     stealth_mode: bool = True  # 默认隐蔽模式
 
     # Worker 配置

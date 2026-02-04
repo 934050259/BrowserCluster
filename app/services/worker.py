@@ -266,6 +266,10 @@ class Worker:
     def _check_drission_idle(self):
         """检查并清理空闲的 DrissionPage 实例"""
         try:
+            # 如果浏览器本身就没打开，直接返回
+            if not drission_manager.is_active:
+                return
+
             idle_timeout = settings.browser_idle_timeout # 使用配置的超时时间
             current_time = time.time()
             last_used = drission_manager.last_used_time
