@@ -119,45 +119,45 @@ import {
 const features = [
   {
     title: '分布式集群',
-    desc: '支持多节点水平扩展，轻松应对高并发抓取需求。',
+    desc: '支持多节点水平扩展，基于容器化部署，轻松应对大规模并发抓取需求。',
     icon: Connection,
     color: '#409EFF',
     bg: '#ecf5ff'
   },
   {
     title: '多模式解析',
-    desc: '集成 GNE、XPath 与 LLM 大模型，支持从零配置到语义化的结构化数据提取。',
+    desc: '集成 GNE、XPath 与 LLM 大模型，支持从规则配置到语义化的结构化数据提取。',
     icon: MagicStick,
     color: '#67C23A',
     bg: '#f0f9eb'
   },
   {
-    title: '高效缓存',
-    desc: '基于 Redis 的结果缓存机制，支持自定义过期时间与自动清理。',
+    title: '云端确权存储',
+    desc: '支持 HTML 源码与截图自动同步至OSS，解决海量数据存储与私有访问需求。',
+    icon: Files,
+    color: '#F56C6C',
+    bg: '#fef0f0'
+  },
+  {
+    title: '双引擎驱动',
+    desc: '支持 Playwright 与 DrissionPage 双引擎，兼顾交互灵活性与极致的反爬避障能力。',
+    icon: Cpu,
+    color: '#7232dd',
+    bg: '#f2ecff'
+  },
+  {
+    title: '自动化调度',
+    desc: '内置 Cron 调度引擎，支持定时周期性任务，实现全自动数据监控与采集流水线。',
     icon: Timer,
     color: '#E6A23C',
     bg: '#fdf6ec'
   },
   {
-    title: 'API 拦截',
-    desc: '支持在页面渲染过程中拦截并提取特定 XHR/Fetch 接口数据。',
+    title: 'API 实时拦截',
+    desc: '支持在页面渲染过程中深度拦截并提取特定 XHR/Fetch 接口的原始响应数据。',
     icon: Connection,
     color: '#409EFF',
     bg: '#ecf5ff'
-  },
-  {
-    title: '多维监控',
-    desc: '实时统计成功率、加载时长、节点状态等核心指标。',
-    icon: DataAnalysis,
-    color: '#909399',
-    bg: '#f4f4f5'
-  },
-  {
-    title: '资源优化',
-    desc: '按需拦截图片、媒体资源，显著提升渲染速度。',
-    icon: Monitor,
-    color: '#7232dd',
-    bg: '#f2ecff'
   }
 ]
 
