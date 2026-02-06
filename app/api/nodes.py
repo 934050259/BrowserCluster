@@ -1,11 +1,10 @@
-from fastapi import APIRouter, HTTPException, Body, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 import os
 import asyncio
 from app.models.node import NodeCreate, NodeResponse, NodeUpdate
 from app.services.node_manager import node_manager
-from app.db.mongo import mongo
 from app.core.auth import get_current_admin
 
 router = APIRouter(prefix="/api/v1/nodes", tags=["Nodes"])
