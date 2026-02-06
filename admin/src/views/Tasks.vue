@@ -176,11 +176,21 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="180" fixed="right" align="center">
+        <el-table-column label="操作" width="220" fixed="right" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-tooltip content="查看详情" placement="top">
                 <el-button circle size="small" :icon="View" @click="viewTask(row)" />
+              </el-tooltip>
+
+              <el-tooltip content="复制并新建" placement="top">
+                <el-button 
+                  circle 
+                  size="small" 
+                  type="success" 
+                  :icon="CopyDocument" 
+                  @click="handleCopyTask(row)" 
+                />
               </el-tooltip>
               
               <el-tooltip content="获取 API 配置" placement="top">
@@ -1425,7 +1435,7 @@ const handleEditAndRetry = (row) => {
     block_images: params.block_images || false,
     block_media: params.block_media || false,
     user_agent: params.user_agent || '',
-    viewport: params.viewport || { width: 1920, height: 1080 },
+    viewport: params.viewport || { width: 1280, height: 720 },
     proxy: params.proxy || { server: '', username: '', password: '' },
     cookies: (function() {
       const c = params.cookies;
@@ -1436,6 +1446,62 @@ const handleEditAndRetry = (row) => {
     stealth: params.stealth !== undefined ? params.stealth : true,
     storage_type: 'mongo',
       save_html: true,
+    parser: params.parser || '',
+    parser_config: params.parser_config || { mode: 'detail', fields: ['title', 'content'] },
+    intercept_apis: params.intercept_apis || [],
+    intercept_continue: params.intercept_continue || false
+  }
+
+  // 特殊处理解析器配置的 UI 绑定
+  if (scrapeForm.value.params.parser === 'llm') {
+    selectedLlmFields.value = scrapeForm.value.params.parser_config.fields || []
+  } else if (scrapeForm.value.params.parser === 'xpath') {
+    const rules = scrapeForm.value.params.parser_config.rules || {}
+    xpathRules.value = Object.entries(rules).map(([field, path]) => ({ field, path }))
+  }
+
+  showScrapeDialog.value = true
+}
+
+const handleCopyTask = (row) => {
+  isRetryEdit.value = false
+  retryTaskId.value = ''
+  submitMode.value = 'single'
+  activeConfigTab.value = 'basic'
+  
+  // 基础配置
+  scrapeForm.value.url = row.url
+  scrapeForm.value.priority = row.priority || 5
+  
+  // 深度拷贝 params 和 cache，避免引用问题
+  const params = JSON.parse(JSON.stringify(row.params || {}))
+  const cache = JSON.parse(JSON.stringify(row.cache || { enabled: true, ttl: 3600 }))
+  
+  scrapeForm.value.cache = cache
+  
+  // 确保所有必要的参数结构都存在
+  scrapeForm.value.params = {
+    engine: params.engine || 'playwright',
+    wait_for: params.wait_for || 'networkidle',
+    wait_time: params.wait_time || 3000,
+    timeout: params.timeout || 30000,
+    selector: params.selector || '',
+    screenshot: params.screenshot !== undefined ? params.screenshot : true,
+    is_fullscreen: params.is_fullscreen || false,
+    block_images: params.block_images || false,
+    block_media: params.block_media || false,
+    user_agent: params.user_agent || '',
+    viewport: params.viewport || { width: 1280, height: 720 },
+    proxy: params.proxy || { server: '', username: '', password: '' },
+    cookies: (function() {
+      const c = params.cookies;
+      if (!c) return '';
+      if (typeof c === 'object') return JSON.stringify(c);
+      return String(c);
+    })(),
+    stealth: params.stealth !== undefined ? params.stealth : true,
+    storage_type: 'mongo',
+    save_html: true,
     parser: params.parser || '',
     parser_config: params.parser_config || { mode: 'detail', fields: ['title', 'content'] },
     intercept_apis: params.intercept_apis || [],
