@@ -6,6 +6,7 @@ Playwright 浏览器管理模块
 import asyncio
 import logging
 import sys
+import tempfile
 import threading
 import time
 from typing import Optional
@@ -101,13 +102,13 @@ class BrowserManager:
                 settings.browser_type,
                 playwright.chromium
             )
-
             # 启动浏览器参数
             launch_args = []
             
             # 反检测参数
             if settings.stealth_mode:
                 launch_args.extend([
+                    '--disable-web-security',
                     "--no-sandbox", 
                     "--disable-setuid-sandbox",
                     "--disable-dev-shm-usage", 
