@@ -76,3 +76,5 @@ DEVELOPMENT_PLAN.md
 dmypy.json
 data/*
 
+tests/*
+

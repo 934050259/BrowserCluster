@@ -16,14 +16,13 @@ from app.services.queue_service import rabbitmq_service
 from app.services.cache_service import cache_service
 from app.services.task_service import task_service
 from app.db.mongo import mongo
-from app.core.auth import get_current_user
 import asyncio
 
 router = APIRouter(prefix="/api/v1/scrape", tags=["Scrape"])
 
 
 @router.post("/", response_model=TaskResponse)
-async def scrape(request: ScrapeRequest, current_user: dict = Depends(get_current_user)):
+async def scrape(request: ScrapeRequest):
     """
     同步抓取网页
 
@@ -164,7 +163,7 @@ async def scrape(request: ScrapeRequest, current_user: dict = Depends(get_curren
 
 
 @router.post("/async", response_model=TaskResponse)
-async def scrape_async(request: ScrapeRequest, current_user: dict = Depends(get_current_user)):
+async def scrape_async(request: ScrapeRequest):
     """
     异步抓取网页
 
@@ -180,7 +179,7 @@ async def scrape_async(request: ScrapeRequest, current_user: dict = Depends(get_
 
 
 @router.post("/batch", response_model=BatchScrapeResponse)
-async def scrape_batch(request: BatchScrapeRequest, current_user: dict = Depends(get_current_user)):
+async def scrape_batch(request: BatchScrapeRequest):
     """
     批量抓取网页
 

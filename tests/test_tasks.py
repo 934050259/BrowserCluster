@@ -87,17 +87,55 @@ async def test_batch_tasks():
     payload = {
         "tasks": [
             {
-                "url": "https://example.com/page1", 
-                "priority": 1,
-                "params": {"wait_for": "domcontentloaded"}
-            },
-            {
-                "url": "https://example.com/page2", 
+                "url": "https://myip.ipip.net/",
+                "params": {
+                    "proxy": {
+                    "server": "http://t127.juliangip.cc:13781",
+                    "username": "18240440465",
+                    "password": "0E9AEoHL"
+                    },
+                    "save_html": False,
+                    "screenshot": True,
+                },
+                "cache": {
+                    "enabled": False,
+                    "ttl": 3600
+                },
                 "priority": 1
             },
             {
-                "url": "https://example.com/page3", 
-                "priority": 2
+                "url": "https://myip.ipip.net/",
+                "params": {
+                    "proxy": {
+                    "server": "http://t127.juliangip.cc:13781",
+                    "username": "18240440465",
+                    "password": "0E9AEoHL"
+                    },
+                    "save_html": False,
+                    "screenshot": True,
+                },
+                "cache": {
+                    "enabled": False,
+                    "ttl": 3600
+                },
+                "priority": 1
+            },
+            {
+                "url": "https://myip.ipip.net/",
+                "params": {
+                    "proxy": {
+                    "server": "http://t127.juliangip.cc:13781",
+                    "username": "18240440465",
+                    "password": "0E9AEoHL"
+                    },
+                    "save_html": False,
+                    "screenshot": True,
+                },
+                "cache": {
+                    "enabled": False,
+                    "ttl": 3600
+                },
+                "priority": 1
             }
         ]
     }
@@ -173,8 +211,8 @@ async def main():
             print("Please start the backend server first.")
             return
 
-    await test_single_task_sync()
-    await test_single_task_async()
+    # await test_single_task_sync()
+    # await test_single_task_async()
     await test_batch_tasks()
 
 if __name__ == "__main__":
