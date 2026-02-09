@@ -134,33 +134,41 @@
                   </el-col>
                   <el-col :span="12" v-if="form.storage_type">
                     <el-form-item label="自定义存储">
-                      <el-input 
-                        v-if="form.storage_type === 'mongo'"
-                        v-model="form.mongo_collection" 
-                        placeholder="自定义 MongoDB 集合名 (默认为 tasks_results)"
-                        size="small"
-                        clearable
-                      >
-                        <template #prefix><el-icon><Collection /></el-icon></template>
-                      </el-input>
-                      <div v-if="form.storage_type === 'mongo'" class="storage-path-preview">
-                        <el-icon><InfoFilled /></el-icon>
-                        <span>实际存储集合: <code>{{ form.mongo_collection || 'tasks_results' }}</code></span>
-                      </div>
+                      <template v-if="form.storage_type === 'mongo'">
+                        <div class="storage-input-group">
+                          <div class="input-label-tip">自定义 MongoDB 集合名</div>
+                          <el-input 
+                            v-model="form.mongo_collection" 
+                            placeholder="例如: my_collection"
+                            size="small"
+                            clearable
+                          >
+                            <template #prefix><el-icon><Collection /></el-icon></template>
+                          </el-input>
+                        </div>
+                        <div class="storage-path-preview">
+                          <el-icon><InfoFilled /></el-icon>
+                          <span>实际存储集合: <code>{{ form.mongo_collection || 'tasks_results' }}</code></span>
+                        </div>
+                      </template>
 
-                      <el-input 
-                        v-if="form.storage_type === 'oss'"
-                        v-model="form.oss_path" 
-                        placeholder="自定义 OSS 存储路径 (默认为 tasks/)"
-                        size="small"
-                        clearable
-                      >
-                        <template #prefix><el-icon><FolderOpened /></el-icon></template>
-                      </el-input>
-                      <div v-if="form.storage_type === 'oss'" class="storage-path-preview">
-                        <el-icon><InfoFilled /></el-icon>
-                        <span>实际存储路径: <code>{{ form.oss_path ? (form.oss_path.endsWith('/') ? form.oss_path : form.oss_path + '/') : 'tasks/' }}{任务ID}/...</code></span>
-                      </div>
+                      <template v-if="form.storage_type === 'oss'">
+                        <div class="storage-input-group">
+                          <div class="input-label-tip">自定义 OSS 存储路径</div>
+                          <el-input 
+                            v-model="form.oss_path" 
+                            placeholder="例如: custom/path/"
+                            size="small"
+                            clearable
+                          >
+                            <template #prefix><el-icon><FolderOpened /></el-icon></template>
+                          </el-input>
+                        </div>
+                        <div class="storage-path-preview">
+                          <el-icon><InfoFilled /></el-icon>
+                          <span>实际存储路径: <code>{{ form.oss_path ? (form.oss_path.endsWith('/') ? form.oss_path : form.oss_path + '/') : 'tasks/' }}{任务ID}/...</code></span>
+                        </div>
+                      </template>
                     </el-form-item>
                   </el-col>
                 </el-row>
@@ -775,6 +783,18 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.storage-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-label-tip {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
 .storage-path-preview {
   font-size: 12px;
   color: #909399;
