@@ -356,8 +356,10 @@
                   </template>
                   <div class="value-content storage-value" v-if="currentTask.params?.storage_type">
                     <el-tag type="success" size="small" class="storage-tag">
-                      <el-icon><Collection v-if="currentTask.params.storage_type === 'mongo'" /><FolderOpened v-else /></el-icon>
-                      {{ currentTask.params.storage_type === 'mongo' ? 'MongoDB' : 'Aliyun OSS' }}
+                      <div class="tag-flex">
+                        <el-icon><Collection v-if="currentTask.params.storage_type === 'mongo'" /><FolderOpened v-else /></el-icon>
+                        <span>{{ currentTask.params.storage_type === 'mongo' ? 'MongoDB' : 'Aliyun OSS' }}</span>
+                      </div>
                     </el-tag>
                     <code class="storage-path">
                       <template v-if="currentTask.params.storage_type === 'mongo'">
@@ -370,8 +372,10 @@
                   </div>
                   <div class="value-content storage-value" v-else>
                     <el-tag type="info" size="small" class="storage-tag">
-                      <el-icon><Collection /></el-icon>
-                      MongoDB (默认)
+                      <div class="tag-flex">
+                        <el-icon><Collection /></el-icon>
+                        <span>MongoDB (默认)</span>
+                      </div>
                     </el-tag>
                     <code class="storage-path">集合: tasks_results</code>
                   </div>
@@ -1147,6 +1151,12 @@ tr:hover .copy-btn-hover {
 .url-text {
   word-break: break-all;
   line-height: 1.4;
+}
+
+.tag-flex {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .storage-value {

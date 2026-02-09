@@ -832,9 +832,11 @@
                 </template>
                 <div class="storage-info-cell" v-if="currentTask.params?.storage_type">
                   <el-tag :type="currentTask.params?.storage_type === 'oss' ? 'warning' : 'info'" size="default">
+                  <div class="tag-content-flex">
                     <el-icon><Collection v-if="currentTask.params.storage_type === 'mongo'" /><FolderOpened v-else /></el-icon>
-                    {{ currentTask.params?.storage_type === 'oss' ? 'Aliyun OSS' : 'MongoDB' }}
-                  </el-tag>
+                    <span>{{ currentTask.params?.storage_type === 'oss' ? 'Aliyun OSS' : 'MongoDB' }}</span>
+                  </div>
+                </el-tag>
                   <code class="storage-path-code">
                     <template v-if="currentTask.params.storage_type === 'mongo'">
                       集合: {{ currentTask.params.mongo_collection || 'tasks_results' }}
@@ -2620,6 +2622,12 @@ onMounted(() => {
 .label-box .el-icon {
   font-size: 16px;
   color: #64748b;
+}
+
+.tag-content-flex {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .storage-info-cell {
