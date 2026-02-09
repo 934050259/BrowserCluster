@@ -1,5 +1,6 @@
 from datetime import datetime
 from bson import ObjectId
+from app.core.config import settings
 from app.models.task import ScrapeRequest, TaskResponse
 from app.services.queue_service import rabbitmq_service
 from app.services.cache_service import cache_service
@@ -26,6 +27,9 @@ class TaskService:
             "priority": request.priority,
             "schedule_id": request.schedule_id,
             "params": params,
+            "retry_count": 0,
+            "retry_enabled": request.retry_enabled if request.retry_enabled is not None else settings.retry_enabled,
+            "max_retries": request.max_retries if request.max_retries is not None else settings.max_retries,
             "cache": request.cache.model_dump(),
             "cache_key": cache_key,
             "cached": False,
@@ -42,7 +46,9 @@ class TaskService:
             "url": url,
             "params": params,
             "cache": request.cache.model_dump(),
-            "priority": request.priority
+            "priority": request.priority,
+            "retry_enabled": task_data["retry_enabled"],
+            "max_retries": task_data["max_retries"]
         }
 
         # 发布任务到队列
@@ -60,6 +66,9 @@ class TaskService:
             task_id=task_id,
             url=url,
             status="pending",
+            retry_count=0,
+            retry_enabled=task_data["retry_enabled"],
+            max_retries=task_data["max_retries"],
             params=params,
             priority=request.priority,
             cache=request.cache.model_dump(),

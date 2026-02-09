@@ -800,6 +800,7 @@ const formatTime = (time) => {
 }
 
 onMounted(() => {
+  window.scrollTo(0, 0)
   fetchData()
 })
 </script>

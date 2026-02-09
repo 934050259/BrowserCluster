@@ -155,6 +155,13 @@
                 </el-tag>
                 <span v-else class="empty-text">-</span>
               </div>
+              <div class="stat-item" v-if="row.retry_count > 0">
+                <el-icon><RefreshRight /></el-icon>
+                <span class="label">重试:</span>
+                <el-tag type="warning" size="small" effect="light" class="retry-tag">
+                  {{ row.retry_count }} 次
+                </el-tag>
+              </div>
             </div>
           </template>
         </el-table-column>
@@ -452,6 +459,22 @@
                 <el-col :span="12" v-if="scrapeForm.cache.enabled">
                   <el-form-item label="缓存有效期 (TTL/秒)">
                     <el-input-number v-model="scrapeForm.cache.ttl" :min="60" :step="60" style="width: 100%" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="自动重试">
+                    <div class="switch-container">
+                      <el-switch v-model="scrapeForm.retry_enabled" />
+                      <span class="switch-tip">{{ scrapeForm.retry_enabled ? '开启 (失败后重试)' : '关闭 (仅执行一次)' }}</span>
+                    </div>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12" v-if="scrapeForm.retry_enabled">
+                  <el-form-item label="最大重试次数">
+                    <el-input-number v-model="scrapeForm.max_retries" :min="1" :max="10" style="width: 100%" />
                   </el-form-item>
                 </el-col>
               </el-row>
@@ -890,6 +913,12 @@
                   {{ currentTask.params?.save_html !== false ? '是' : '否' }}
                 </el-tag>
               </el-descriptions-item>
+              <el-descriptions-item v-if="currentTask.retry_count > 0">
+                <template #label>
+                  <div class="label-box"><el-icon><RefreshRight /></el-icon><span>自动重试</span></div>
+                </template>
+                <el-tag type="warning" size="default">{{ currentTask.retry_count }} 次</el-tag>
+              </el-descriptions-item>
               <el-descriptions-item>
                 <template #label>
                   <div class="label-box"><el-icon><MagicStick /></el-icon><span>解析引擎</span></div>
@@ -1089,10 +1118,11 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Delete, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right, Document, UploadFilled, MagicStick, Warning, ArrowDown } from '@element-plus/icons-vue'
+import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Delete, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right, Document, UploadFilled, MagicStick, Warning, ArrowDown, RefreshRight } from '@element-plus/icons-vue'
 import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch, scrapeBatch, getRulesByDomain, getProxyStats } from '../api'
 import { watch } from 'vue'
 import dayjs from 'dayjs'
+import { fa } from 'element-plus/es/locale/index.mjs'
 
 const loading = ref(false)
 const tasks = ref([])
@@ -1375,6 +1405,8 @@ const handleFileRemove = () => {
 
 const scrapeForm = ref({
   url: '',
+  retry_enabled: true,
+  max_retries: 3,
   params: {
     engine: 'playwright',
     wait_for: 'networkidle',
@@ -1570,6 +1602,8 @@ const fillFormFromTask = (row) => {
   // 基础配置
   scrapeForm.value.url = row.url
   scrapeForm.value.priority = row.priority || 1
+  scrapeForm.value.retry_enabled = row.retry_enabled !== undefined ? row.retry_enabled : true
+  scrapeForm.value.max_retries = row.max_retries || 3
   
   // 深度拷贝 params 和 cache，避免引用问题
   const params = JSON.parse(JSON.stringify(row.params || {}))
@@ -1853,6 +1887,8 @@ const resetForm = () => {
   retryTaskId.value = ''
   scrapeForm.value = {
     url: '',
+    retry_enabled: false,
+    max_retries: 3,
     params: {
       engine: 'playwright',
       proxy_pool_group: null,

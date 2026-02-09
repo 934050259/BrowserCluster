@@ -6,6 +6,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 from bson import ObjectId
+from app.core.config import settings
 from app.models.task import (
     ScrapeRequest,
     TaskResponse,
@@ -62,6 +63,9 @@ async def scrape(request: ScrapeRequest):
                 "status": cached.get("status", "success"),
                 "priority": request.priority,
                 "params": params,
+                "retry_count": 0,
+                "retry_enabled": request.retry_enabled if request.retry_enabled is not None else settings.retry_enabled,
+                "max_retries": request.max_retries if request.max_retries is not None else settings.max_retries,
                 "result": result_data,
                 "cache_key": cache_key,
                 "cached": True,
@@ -75,6 +79,9 @@ async def scrape(request: ScrapeRequest):
                 task_id=task_id,
                 url=url,
                 status=task_data["status"],
+                retry_count=task_data["retry_count"],
+                retry_enabled=task_data["retry_enabled"],
+                max_retries=task_data["max_retries"],
                 params=task_data["params"],
                 priority=task_data["priority"],
                 result=task_data["result"],
@@ -91,6 +98,9 @@ async def scrape(request: ScrapeRequest):
         "status": "pending",
         "priority": request.priority,
         "params": params,
+        "retry_count": 0,
+        "retry_enabled": request.retry_enabled if request.retry_enabled is not None else settings.retry_enabled,
+        "max_retries": request.max_retries if request.max_retries is not None else settings.max_retries,
         "cache": request.cache.model_dump(),
         "cache_key": cache_key,
         "cached": False,
@@ -107,7 +117,9 @@ async def scrape(request: ScrapeRequest):
         "url": url,
         "params": params,
         "cache": request.cache.model_dump(),
-        "priority": request.priority
+        "priority": request.priority,
+        "retry_enabled": task_data["retry_enabled"],
+        "max_retries": task_data["max_retries"]
     }
 
     # 发布任务到队列
@@ -139,6 +151,9 @@ async def scrape(request: ScrapeRequest):
                     task_id=task_id,
                     url=url,
                     status=task["status"],
+                    retry_count=task.get("retry_count", 0),
+                    retry_enabled=task.get("retry_enabled"),
+                    max_retries=task.get("max_retries"),
                     params=task.get("params"),
                     priority=task.get("priority"),
                     cache=task.get("cache"),

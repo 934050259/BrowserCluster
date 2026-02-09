@@ -46,6 +46,7 @@ class Settings(BaseSettings):
 
     # Worker 配置
     worker_concurrency: int = 3  # Worker 并发数
+    retry_enabled: bool = True  # 是否启用自动重试
     max_retries: int = 3  # 最大重试次数
     retry_delay: int = 5  # 重试延迟（秒）
 

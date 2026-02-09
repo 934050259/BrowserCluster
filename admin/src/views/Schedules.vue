@@ -264,6 +264,22 @@
                 </el-col>
               </el-row>
 
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="自动重试">
+                    <div class="switch-container">
+                      <el-switch v-model="form.retry_enabled" />
+                      <span class="switch-tip">{{ form.retry_enabled ? '开启 (失败后重试)' : '关闭 (仅执行一次)' }}</span>
+                    </div>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12" v-if="form.retry_enabled">
+                  <el-form-item label="最大重试次数">
+                    <el-input-number v-model="form.max_retries" :min="1" :max="10" controls-position="right" style="width: 100%" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+
               <el-form-item label="目标 URL" prop="url" required>
                 <el-input v-model="form.url" placeholder="https://example.com" clearable>
                   <template #prefix><el-icon class="icon-link"><Connection /></el-icon></template>
@@ -768,6 +784,8 @@ const form = ref({
   cron: '',
   once_time: '',
   priority: 5,
+  retry_enabled: false,
+  max_retries: 3,
   params: {
     engine: 'playwright',
     wait_for: 'networkidle',
@@ -1077,6 +1095,8 @@ const openCreateDialog = () => {
     cron: '',
     once_time: '',
     priority: 5,
+    retry_enabled: true,
+    max_retries: 3,
     params: {
       engine: 'playwright',
       proxy_pool_group: null,
@@ -1133,6 +1153,13 @@ const handleEdit = (row) => {
   
   if (form.value.once_time === undefined) {
     form.value.once_time = ''
+  }
+
+  if (form.value.retry_enabled === undefined) {
+    form.value.retry_enabled = true
+  }
+  if (form.value.max_retries === undefined) {
+    form.value.max_retries = 3
   }
   
   // 确保 engine 参数存在 (兼容旧数据)

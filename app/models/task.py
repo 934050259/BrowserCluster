@@ -55,6 +55,8 @@ class ScrapeRequest(BaseModel):
     cache: CacheConfig = Field(default_factory=CacheConfig)  # 缓存配置
     priority: int = 1  # 任务优先级（数字越大优先级越高）
     schedule_id: Optional[str] = None  # 所属定时任务 ID (如果是定时任务触发的)
+    retry_enabled: Optional[bool] = None  # 是否启用自动重试 (None 则使用系统全局配置)
+    max_retries: Optional[int] = None  # 最大重试次数 (None 则使用系统全局配置)
 
 
 class TaskMetadata(BaseModel):
@@ -112,6 +114,9 @@ class TaskModel(BaseModel):
     cache_key: Optional[str] = None  # 缓存键
     cached: bool = False  # 是否命中缓存
     node_id: Optional[str] = None  # 处理节点 ID
+    retry_count: int = 0  # 当前重试次数
+    retry_enabled: bool = True  # 是否启用重试
+    max_retries: int = 3  # 最大重试次数
     created_at: datetime = Field(default_factory=datetime.now)  # 创建时间
     updated_at: datetime = Field(default_factory=datetime.now)  # 更新时间
     completed_at: Optional[datetime] = None  # 完成时间
@@ -123,6 +128,9 @@ class TaskResponse(BaseModel):
     url: str  # 目标 URL
     node_id: Optional[str] = None  # 处理节点 ID
     status: str  # 任务状态
+    retry_count: int = 0  # 当前重试次数
+    retry_enabled: bool = True  # 是否启用重试
+    max_retries: int = 3  # 最大重试次数
     params: Optional[Dict[str, Any]] = None  # 抓取参数
     priority: Optional[int] = 1  # 优先级
     cache: Optional[Dict[str, Any]] = None  # 缓存配置

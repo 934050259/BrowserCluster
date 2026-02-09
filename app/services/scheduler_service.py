@@ -102,7 +102,9 @@ class SchedulerService:
                 params=schedule.params,
                 cache=schedule.cache,
                 priority=schedule.priority,
-                schedule_id=schedule_id
+                schedule_id=schedule_id,
+                retry_enabled=schedule.retry_enabled,
+                max_retries=schedule.max_retries
             )
             
             # 调用任务服务创建异步任务

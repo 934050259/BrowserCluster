@@ -160,6 +160,22 @@
 
                 <el-row :gutter="20">
                   <el-col :span="12">
+                    <el-form-item label="自动重试">
+                      <div class="switch-container">
+                        <el-switch v-model="form.retry_enabled" />
+                        <span class="switch-tip">{{ form.retry_enabled ? '开启 (失败后重试)' : '关闭 (不重试)' }}</span>
+                      </div>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12" v-if="form.retry_enabled">
+                    <el-form-item label="最大重试次数">
+                      <el-input-number v-model="form.max_retries" :min="1" :max="10" controls-position="right" style="width: 100%" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+
+                <el-row :gutter="20">
+                  <el-col :span="12">
                     <el-form-item label="存储位置">
                       <el-radio-group v-model="form.storage_type" size="default">
                         <el-radio-button label="mongo">MongoDB</el-radio-button>
@@ -665,7 +681,9 @@ const form = reactive({
   cookies: '',
   description: '',
   is_active: true,
-  priority: 5
+  priority: 5,
+  retry_enabled: true,
+  max_retries: 3
 })
 
 const formRules = {
@@ -729,7 +747,9 @@ const handleAdd = () => {
     cookies: '',
     description: '',
     is_active: true,
-    priority: 5
+    priority: 5,
+    retry_enabled: true,
+    max_retries: 3
   })
   selectedLlmFields.value = ['title', 'content']
   form.parser_config = { fields: ['title', 'content'] }
@@ -753,6 +773,8 @@ const handleEdit = (row) => {
   if (rowData.storage_type === undefined) rowData.storage_type = 'mongo'
   if (rowData.mongo_collection === undefined) rowData.mongo_collection = ''
   if (rowData.oss_path === undefined) rowData.oss_path = ''
+  if (rowData.retry_enabled === undefined) rowData.retry_enabled = true
+  if (rowData.max_retries === undefined) rowData.max_retries = 3
   
   Object.assign(form, rowData)
   

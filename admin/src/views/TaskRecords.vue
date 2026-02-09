@@ -136,27 +136,35 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="性能耗时" width="160" align="center">
+        <el-table-column label="性能与重试" width="180" align="center">
           <template #default="{ row }">
-            <div class="performance-cell" v-if="row.duration || row.result?.metadata?.load_time">
-              <div class="duration-bar-container">
-                <el-tooltip placement="top">
-                  <template #content>
-                    总耗时: {{ row.duration?.toFixed(2) }}s<br/>
-                    页面加载: {{ row.result?.metadata?.load_time?.toFixed(2) }}s
-                  </template>
-                  <div class="duration-visual">
-                    <div class="duration-label">
-                      <span class="total">{{ row.duration?.toFixed(1) }}s</span>
+            <div class="performance-retry-cell" v-if="row.duration || row.result?.metadata?.load_time || (row.retry_count || 0) > 0">
+              <div class="performance-cell" v-if="row.duration || row.result?.metadata?.load_time">
+                <div class="duration-bar-container">
+                  <el-tooltip placement="top">
+                    <template #content>
+                      总耗时: {{ row.duration?.toFixed(2) }}s<br/>
+                      页面加载: {{ row.result?.metadata?.load_time?.toFixed(2) }}s
+                    </template>
+                    <div class="duration-visual">
+                      <div class="duration-label">
+                        <span class="total">{{ row.duration?.toFixed(1) }}s</span>
+                      </div>
+                      <div class="duration-bar">
+                        <div 
+                          class="bar-load" 
+                          :style="{ width: getLoadPercent(row) + '%' }"
+                        ></div>
+                      </div>
                     </div>
-                    <div class="duration-bar">
-                      <div 
-                        class="bar-load" 
-                        :style="{ width: getLoadPercent(row) + '%' }"
-                      ></div>
-                    </div>
-                  </div>
-                </el-tooltip>
+                  </el-tooltip>
+                </div>
+              </div>
+              <div class="retry-info-mini" v-if="(row.retry_count || 0) > 0">
+                <el-tag type="warning" size="small" effect="plain" class="retry-tag">
+                  <el-icon><RefreshRight /></el-icon>
+                  重试 {{ row.retry_count }}
+                </el-tag>
               </div>
             </div>
             <span v-else class="empty-text">-</span>
@@ -327,6 +335,14 @@
                 </el-descriptions-item>
 
                 <!-- 第六行：浏览器引擎和解析模式 -->
+                <el-descriptions-item v-if="currentTask.retry_count > 0">
+                  <template #label>
+                    <div class="label-box"><el-icon><RefreshRight /></el-icon><span>自动重试</span></div>
+                  </template>
+                  <div class="value-content">
+                    <el-tag type="warning" size="default">{{ currentTask.retry_count }} 次</el-tag>
+                  </div>
+                </el-descriptions-item>
                 <el-descriptions-item>
                   <template #label>
                     <div class="label-box"><el-icon><Monitor /></el-icon><span>浏览器引擎</span></div>
@@ -531,7 +547,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, ArrowRight, Refresh, Search, Link, View, CopyDocument, Timer, CircleCheck, CircleClose, Cpu, QuestionFilled, Key, InfoFilled, Watch, Connection, Files, Monitor, MagicStick, Setting, Box, Right, Delete, Document, Loading } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Refresh, Search, Link, View, CopyDocument, Timer, CircleCheck, CircleClose, Cpu, QuestionFilled, Key, InfoFilled, Watch, Connection, Files, Monitor, MagicStick, Setting, Box, Right, Delete, Document, Loading, RefreshRight } from '@element-plus/icons-vue'
 import { getTasks, getTask, getSchedule, deleteTask, deleteTasksBatch } from '../api'
 import dayjs from 'dayjs'
 

@@ -108,6 +108,11 @@ class Worker:
             return
 
         self.active_tasks[task_id] = task_data
+        current_retry_count = task.get("retry_count", 0)
+        
+        # 优先使用任务级别的重试配置，如果没有则使用全局配置
+        retry_enabled = task_data.get("retry_enabled", settings.retry_enabled)
+        max_retries = task_data.get("max_retries", settings.max_retries)
 
         try:
             # 更新任务状态为处理中
@@ -163,14 +168,61 @@ class Worker:
 
                 logger.info(f"Task {task_id} completed successfully")
             else:
-                # 更新任务状态为失败
-                await self._update_task_failed(task_id, result["error"])
-                logger.error(f"Task {task_id} failed: {result['error']}")
+                # 检查是否可以自动重试
+                if retry_enabled and current_retry_count < max_retries:
+                    new_retry_count = current_retry_count + 1
+                    logger.warning(f"Task {task_id} failed, retrying ({new_retry_count}/{max_retries}). Error: {result.get('error', {}).get('message')}")
+                    
+                    # 更新数据库中的重试次数和状态
+                    mongo.tasks.update_one(
+                        {"task_id": task_id},
+                        {
+                            "$set": {
+                                "retry_count": new_retry_count,
+                                "status": "pending",
+                                "updated_at": datetime.now()
+                            },
+                            "$unset": {"error": ""}
+                        }
+                    )
+                    
+                    # 延迟重试
+                    if settings.retry_delay > 0:
+                        await asyncio.sleep(settings.retry_delay)
+                    
+                    # 重新入队
+                    rabbitmq_service.publish_task(task_data)
+                else:
+                    # 超过重试次数，标记为失败
+                    await self._update_task_failed(task_id, result["error"])
+                    logger.error(f"Task {task_id} failed after {current_retry_count} retries: {result['error']}")
 
         except Exception as e:
             # 处理异常
             if self.is_running:
-                await self._update_task_failed(task_id, {"message": str(e)})
+                # 异常也尝试重试
+                if 'current_retry_count' in locals() and current_retry_count < settings.max_retries:
+                    new_retry_count = current_retry_count + 1
+                    logger.warning(f"Task {task_id} encountered exception, retrying ({new_retry_count}/{settings.max_retries}). Error: {e}")
+                    
+                    mongo.tasks.update_one(
+                        {"task_id": task_id},
+                        {
+                            "$set": {
+                                "retry_count": new_retry_count,
+                                "status": "pending",
+                                "updated_at": datetime.now()
+                            },
+                            "$unset": {"error": ""}
+                        }
+                    )
+                    
+                    if settings.retry_delay > 0:
+                        await asyncio.sleep(settings.retry_delay)
+                    
+                    rabbitmq_service.publish_task(task_data)
+                else:
+                    await self._update_task_failed(task_id, {"message": str(e)})
             logger.error(f"Task {task_id} error: {e}", exc_info=True)
         finally:
             self.active_tasks.pop(task_id, None)

@@ -90,6 +90,9 @@ async def get_task(
         url=task["url"],
         node_id=task.get("node_id"),
         status=task["status"],
+        retry_count=task.get("retry_count", 0),
+        retry_enabled=task.get("retry_enabled", True),
+        max_retries=task.get("max_retries", 3),
         params=task.get("params"),
         priority=task.get("priority"),
         cache=task.get("cache"),
@@ -222,6 +225,7 @@ async def retry_task(task_id: str, request: Optional[RetryRequest] = None):
     now = datetime.now()
     update_data = {
         "status": "pending",
+        "retry_count": 0,
         "result": None,
         "cached": False,
         "updated_at": now,
@@ -264,7 +268,9 @@ async def retry_task(task_id: str, request: Optional[RetryRequest] = None):
         "url": final_url,
         "params": final_params,
         "cache": final_cache,
-        "priority": final_priority
+        "priority": final_priority,
+        "retry_enabled": task.get("retry_enabled", True),
+        "max_retries": task.get("max_retries", 3)
     }
 
     if not rabbitmq_service.publish_task(queue_task):
@@ -280,6 +286,9 @@ async def retry_task(task_id: str, request: Optional[RetryRequest] = None):
         task_id=task_id,
         url=final_url,
         status="pending",
+        retry_count=0,
+        retry_enabled=task.get("retry_enabled", True),
+        max_retries=task.get("max_retries", 3),
         params=final_params,
         priority=final_priority,
         cache=final_cache,

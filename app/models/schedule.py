@@ -29,6 +29,8 @@ class ScheduleModel(BaseModel):
     params: ScrapeParams = Field(default_factory=ScrapeParams)  # 抓取参数
     cache: CacheConfig = Field(default_factory=CacheConfig)  # 缓存配置
     priority: int = 1  # 任务优先级
+    retry_enabled: Optional[bool] = None  # 是否启用自动重试 (None 则使用系统全局配置)
+    max_retries: Optional[int] = None  # 最大重试次数 (None 则使用系统全局配置)
     
     # 调度策略
     schedule_type: ScheduleType = ScheduleType.INTERVAL
@@ -50,6 +52,8 @@ class ScheduleCreate(BaseModel):
     params: ScrapeParams = Field(default_factory=ScrapeParams)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     priority: int = 1
+    retry_enabled: Optional[bool] = None
+    max_retries: Optional[int] = None
     schedule_type: ScheduleType
     interval: Optional[int] = None
     cron: Optional[str] = None
@@ -63,6 +67,8 @@ class ScheduleUpdate(BaseModel):
     params: Optional[ScrapeParams] = None
     cache: Optional[CacheConfig] = None
     priority: Optional[int] = None
+    retry_enabled: Optional[bool] = None
+    max_retries: Optional[int] = None
     schedule_type: Optional[ScheduleType] = None
     interval: Optional[int] = None
     cron: Optional[str] = None

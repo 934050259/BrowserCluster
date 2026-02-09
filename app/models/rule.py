@@ -20,6 +20,8 @@ class ParsingRule(BaseModel):
     screenshot: Optional[bool] = False
     is_fullscreen: Optional[bool] = False
     block_images: Optional[bool] = False
+    retry_enabled: Optional[bool] = None  # 是否启用自动重试
+    max_retries: Optional[int] = None  # 最大重试次数
     
     # 高级配置
     intercept_apis: Optional[list] = Field(default_factory=list)
@@ -54,6 +56,8 @@ class ParsingRuleCreate(BaseModel):
     screenshot: Optional[bool] = False
     is_fullscreen: Optional[bool] = False
     block_images: Optional[bool] = False
+    retry_enabled: Optional[bool] = None
+    max_retries: Optional[int] = None
     
     # 高级配置
     intercept_apis: Optional[list] = Field(default_factory=list)
@@ -86,6 +90,8 @@ class ParsingRuleUpdate(BaseModel):
     screenshot: Optional[bool] = None
     is_fullscreen: Optional[bool] = None
     block_images: Optional[bool] = None
+    retry_enabled: Optional[bool] = None
+    max_retries: Optional[int] = None
     
     # 高级配置
     intercept_apis: Optional[list] = None
