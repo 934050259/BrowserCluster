@@ -1519,15 +1519,10 @@ const confirmRetry = (row) => {
   })
 }
 
-const handleEditAndRetry = (row) => {
-  isRetryEdit.value = true
-  retryTaskId.value = row.task_id
-  submitMode.value = 'single'
-  activeConfigTab.value = 'basic'
-  
+const fillFormFromTask = (row) => {
   // 基础配置
   scrapeForm.value.url = row.url
-  scrapeForm.value.priority = row.priority || 5
+  scrapeForm.value.priority = row.priority || 1
   
   // 深度拷贝 params 和 cache，避免引用问题
   const params = JSON.parse(JSON.stringify(row.params || {}))
@@ -1535,7 +1530,7 @@ const handleEditAndRetry = (row) => {
   
   scrapeForm.value.cache = cache
   
-  // 确保所有必要的参数结构都存在
+  // 确保所有必要的参数结构都存在，并从原任务中复制
   scrapeForm.value.params = {
     engine: params.engine || 'playwright',
     wait_for: params.wait_for || 'networkidle',
@@ -1547,7 +1542,7 @@ const handleEditAndRetry = (row) => {
     block_images: params.block_images || false,
     block_media: params.block_media || false,
     user_agent: params.user_agent || '',
-    viewport: params.viewport || { width: 1280, height: 720 },
+    viewport: params.viewport || { width: 1920, height: 1080 },
     proxy: params.proxy || { server: '', username: '', password: '' },
     cookies: (function() {
       const c = params.cookies;
@@ -1556,8 +1551,10 @@ const handleEditAndRetry = (row) => {
       return String(c);
     })(),
     stealth: params.stealth !== undefined ? params.stealth : true,
-    storage_type: 'mongo',
-      save_html: true,
+    storage_type: params.storage_type || 'mongo',
+    mongo_collection: params.mongo_collection || '',
+    oss_path: params.oss_path || '',
+    save_html: params.save_html !== undefined ? params.save_html : true,
     parser: params.parser || '',
     parser_config: params.parser_config || { mode: 'detail', fields: ['title', 'content'] },
     intercept_apis: params.intercept_apis || [],
@@ -1571,6 +1568,15 @@ const handleEditAndRetry = (row) => {
     const rules = scrapeForm.value.params.parser_config.rules || {}
     xpathRules.value = Object.entries(rules).map(([field, path]) => ({ field, path }))
   }
+}
+
+const handleEditAndRetry = (row) => {
+  isRetryEdit.value = true
+  retryTaskId.value = row.task_id
+  submitMode.value = 'single'
+  activeConfigTab.value = 'basic'
+  
+  fillFormFromTask(row)
 
   showScrapeDialog.value = true
 }
@@ -1581,52 +1587,7 @@ const handleCopyTask = (row) => {
   submitMode.value = 'single'
   activeConfigTab.value = 'basic'
   
-  // 基础配置
-  scrapeForm.value.url = row.url
-  scrapeForm.value.priority = row.priority || 5
-  
-  // 深度拷贝 params 和 cache，避免引用问题
-  const params = JSON.parse(JSON.stringify(row.params || {}))
-  const cache = JSON.parse(JSON.stringify(row.cache || { enabled: true, ttl: 3600 }))
-  
-  scrapeForm.value.cache = cache
-  
-  // 确保所有必要的参数结构都存在
-  scrapeForm.value.params = {
-    engine: params.engine || 'playwright',
-    wait_for: params.wait_for || 'networkidle',
-    wait_time: params.wait_time || 3000,
-    timeout: params.timeout || 30000,
-    selector: params.selector || '',
-    screenshot: params.screenshot !== undefined ? params.screenshot : true,
-    is_fullscreen: params.is_fullscreen || false,
-    block_images: params.block_images || false,
-    block_media: params.block_media || false,
-    user_agent: params.user_agent || '',
-    viewport: params.viewport || { width: 1280, height: 720 },
-    proxy: params.proxy || { server: '', username: '', password: '' },
-    cookies: (function() {
-      const c = params.cookies;
-      if (!c) return '';
-      if (typeof c === 'object') return JSON.stringify(c);
-      return String(c);
-    })(),
-    stealth: params.stealth !== undefined ? params.stealth : true,
-    storage_type: 'mongo',
-    save_html: true,
-    parser: params.parser || '',
-    parser_config: params.parser_config || { mode: 'detail', fields: ['title', 'content'] },
-    intercept_apis: params.intercept_apis || [],
-    intercept_continue: params.intercept_continue || false
-  }
-
-  // 特殊处理解析器配置的 UI 绑定
-  if (scrapeForm.value.params.parser === 'llm') {
-    selectedLlmFields.value = scrapeForm.value.params.parser_config.fields || []
-  } else if (scrapeForm.value.params.parser === 'xpath') {
-    const rules = scrapeForm.value.params.parser_config.rules || {}
-    xpathRules.value = Object.entries(rules).map(([field, path]) => ({ field, path }))
-  }
+  fillFormFromTask(row)
 
   showScrapeDialog.value = true
 }
