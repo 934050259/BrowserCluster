@@ -98,7 +98,7 @@ class OSSService:
             logger.error(f"Error uploading {filename} to OSS: {e}")
             return None
 
-    def upload_task_assets(self, task_id: str, html: Optional[str], screenshot: Optional[str], force: bool = False) -> Tuple[Optional[str], Optional[str]]:
+    def upload_task_assets(self, task_id: str, html: Optional[str], screenshot: Optional[str], force: bool = False, custom_path: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
         """
         上传任务的 HTML 和截图到 OSS
 
@@ -107,6 +107,7 @@ class OSSService:
             html: HTML 内容
             screenshot: 截图 Base64
             force: 是否强制上传
+            custom_path: 自定义存储路径 (例如: mydata/2024/)
 
         Returns:
             Tuple[Optional[str], Optional[str]]: (html_url, screenshot_url)
@@ -114,12 +115,19 @@ class OSSService:
         html_url = None
         screenshot_url = None
 
+        # 确定基础路径
+        base_path = f"tasks/{task_id}"
+        if custom_path:
+            # 确保自定义路径以 / 结尾
+            custom_path = custom_path if custom_path.endswith('/') else f"{custom_path}/"
+            base_path = f"{custom_path}{task_id}"
+
         if html:
-            html_filename = f"tasks/{task_id}/index.html"
+            html_filename = f"{base_path}/index.html"
             html_url = self.upload_content(html, html_filename, "text/html", force=force)
 
         if screenshot:
-            screenshot_filename = f"tasks/{task_id}/screenshot.png"
+            screenshot_filename = f"{base_path}/screenshot.png"
             screenshot_url = self.upload_content(screenshot, screenshot_filename, "image/png", force=force)
 
         return html_url, screenshot_url

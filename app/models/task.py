@@ -37,6 +37,8 @@ class ScrapeParams(BaseModel):
     parser: Optional[str] = None  # 解析服务类型: gne, llm, xpath
     parser_config: Optional[Dict[str, Any]] = None  # 解析配置 (例如 LLM 需要解析的字段)
     storage_type: StorageType = StorageType.MONGO  # 存储位置: mongo, oss
+    mongo_collection: Optional[str] = None  # 自定义 MongoDB 表名
+    oss_path: Optional[str] = None  # 自定义 OSS 存储路径
 
 
 class CacheConfig(BaseModel):

@@ -62,7 +62,7 @@
     <el-dialog 
       v-model="dialogVisible" 
       :title="isEdit ? '编辑网站配置' : '添加网站配置'" 
-      width="800px"
+      width="850px"
       destroy-on-close
       top="8vh"
       class="config-dialog"
@@ -118,6 +118,48 @@
                       <div class="switch-container">
                         <el-switch v-model="form.is_active" />
                         <span class="switch-tip">{{ form.is_active ? '启用中' : '已禁用' }}</span>
+                      </div>
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+
+                <el-row :gutter="20">
+                  <el-col :span="12">
+                    <el-form-item label="存储位置">
+                      <el-radio-group v-model="form.storage_type" size="default">
+                        <el-radio-button label="mongo">MongoDB</el-radio-button>
+                        <el-radio-button label="oss">OSS 存储</el-radio-button>
+                      </el-radio-group>
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12" v-if="form.storage_type">
+                    <el-form-item label="自定义存储">
+                      <el-input 
+                        v-if="form.storage_type === 'mongo'"
+                        v-model="form.mongo_collection" 
+                        placeholder="自定义 MongoDB 集合名 (默认为 tasks_results)"
+                        size="small"
+                        clearable
+                      >
+                        <template #prefix><el-icon><Collection /></el-icon></template>
+                      </el-input>
+                      <div v-if="form.storage_type === 'mongo'" class="storage-path-preview">
+                        <el-icon><InfoFilled /></el-icon>
+                        <span>实际存储集合: <code>{{ form.mongo_collection || 'tasks_results' }}</code></span>
+                      </div>
+
+                      <el-input 
+                        v-if="form.storage_type === 'oss'"
+                        v-model="form.oss_path" 
+                        placeholder="自定义 OSS 存储路径 (默认为 tasks/)"
+                        size="small"
+                        clearable
+                      >
+                        <template #prefix><el-icon><FolderOpened /></el-icon></template>
+                      </el-input>
+                      <div v-if="form.storage_type === 'oss'" class="storage-path-preview">
+                        <el-icon><InfoFilled /></el-icon>
+                        <span>实际存储路径: <code>{{ form.oss_path ? (form.oss_path.endsWith('/') ? form.oss_path : form.oss_path + '/') : 'tasks/' }}{任务ID}/...</code></span>
                       </div>
                     </el-form-item>
                   </el-col>
@@ -517,6 +559,9 @@ const form = reactive({
   block_images: false,
   
   // 高级配置
+  storage_type: 'mongo',
+  mongo_collection: '',
+  oss_path: '',
   intercept_apis: [],
   intercept_continue: true,
   proxy: { server: '', username: '', password: '' },
@@ -565,6 +610,9 @@ const handleAdd = () => {
     block_images: false,
     
     // 高级配置
+    storage_type: 'mongo',
+    mongo_collection: '',
+    oss_path: '',
     intercept_apis: [],
     intercept_continue: true,
     proxy: { server: '', username: '', password: '' },
@@ -593,6 +641,9 @@ const handleEdit = (row) => {
   if (!rowData.proxy) rowData.proxy = { server: '', username: '', password: '' }
   if (!rowData.intercept_apis) rowData.intercept_apis = []
   if (rowData.intercept_continue === undefined) rowData.intercept_continue = true
+  if (rowData.storage_type === undefined) rowData.storage_type = 'mongo'
+  if (rowData.mongo_collection === undefined) rowData.mongo_collection = ''
+  if (rowData.oss_path === undefined) rowData.oss_path = ''
   
   Object.assign(form, rowData)
   
@@ -724,6 +775,28 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.storage-path-preview {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px dashed #e2e8f0;
+}
+
+.storage-path-preview code {
+  background: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #3b82f6;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+}
 .rules-container {
   padding: 20px;
 }

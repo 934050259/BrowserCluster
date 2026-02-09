@@ -380,18 +380,24 @@
                 <!-- 第八行：存储配置和重定向 (如果有) -->
                 <el-descriptions-item :span="currentTask.result?.metadata?.actual_url && currentTask.result.metadata.actual_url !== currentTask.url ? 1 : 2">
                   <template #label>
-                    <div class="label-box"><el-icon><Box /></el-icon><span>存储配置</span></div>
+                    <div class="label-box"><el-icon><Box /></el-icon><span>存储位置</span></div>
                   </template>
                   <div class="value-content storage-cell">
-                    <el-tag :type="currentTask.params?.storage_type === 'oss' ? 'warning' : 'info'" size="small">
-                      {{ currentTask.params?.storage_type === 'oss' ? 'OSS 存储' : 'MongoDB 存储' }}
-                    </el-tag>
-                    <el-tooltip placement="top">
-                      <template #content>
-                        {{ currentTask.params?.storage_type === 'oss' ? '源码和截图存储在 OSS，数据库仅保留元数据。' : '所有数据均存储在本地 MongoDB 数据库中。' }}
-                      </template>
-                      <el-icon class="help-icon-inline"><QuestionFilled /></el-icon>
-                    </el-tooltip>
+                    <div class="storage-info-wrapper">
+                      <el-tag :type="currentTask.params?.storage_type === 'oss' ? 'warning' : 'info'" size="small">
+                        {{ currentTask.params?.storage_type === 'oss' ? 'OSS 存储' : 'MongoDB 存储' }}
+                      </el-tag>
+                      <div class="storage-detail-tag">
+                        <template v-if="currentTask.params?.storage_type === 'oss'">
+                          <el-icon><FolderOpened /></el-icon>
+                          <span>路径: <code>{{ currentTask.params?.oss_path ? (currentTask.params.oss_path.endsWith('/') ? currentTask.params.oss_path : currentTask.params.oss_path + '/') : 'tasks/' }}{{ currentTask.task_id }}/</code></span>
+                        </template>
+                        <template v-else>
+                          <el-icon><Collection /></el-icon>
+                          <span>集合: <code>{{ currentTask.params?.mongo_collection || 'tasks_results' }}</code></span>
+                        </template>
+                      </div>
+                    </div>
                   </div>
                 </el-descriptions-item>
                 <el-descriptions-item v-if="currentTask.result?.metadata?.actual_url && currentTask.result.metadata.actual_url !== currentTask.url">
@@ -1059,6 +1065,36 @@ tr:hover .copy-btn-hover {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.storage-info-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.storage-detail-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  width: fit-content;
+}
+
+.storage-detail-tag code {
+  background: #fff;
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: #3b82f6;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
 }
 
 .info-tab-content {

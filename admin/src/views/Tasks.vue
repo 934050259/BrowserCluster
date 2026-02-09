@@ -389,6 +389,37 @@
                       <el-radio-button label="mongo">MongoDB</el-radio-button>
                       <el-radio-button label="oss">OSS 存储</el-radio-button>
                     </el-radio-group>
+
+                    <div class="custom-storage-fields mt-2" v-if="scrapeForm.params.storage_type">
+                      <el-input 
+                        v-if="scrapeForm.params.storage_type === 'mongo'"
+                        v-model="scrapeForm.params.mongo_collection" 
+                        placeholder="自定义 MongoDB 集合名 (默认为 tasks_results)"
+                        size="small"
+                        clearable
+                      >
+                        <template #prefix><el-icon><Collection /></el-icon></template>
+                      </el-input>
+                      <div v-if="scrapeForm.params.storage_type === 'mongo'" class="storage-path-preview">
+                        <el-icon><InfoFilled /></el-icon>
+                        <span>实际存储集合: <code>{{ scrapeForm.params.mongo_collection || 'tasks_results' }}</code></span>
+                      </div>
+
+                      <el-input 
+                        v-if="scrapeForm.params.storage_type === 'oss'"
+                        v-model="scrapeForm.params.oss_path" 
+                        placeholder="自定义 OSS 存储路径 (默认为 tasks/)"
+                        size="small"
+                        clearable
+                      >
+                        <template #prefix><el-icon><FolderOpened /></el-icon></template>
+                      </el-input>
+                      <div v-if="scrapeForm.params.storage_type === 'oss'" class="storage-path-preview">
+                        <el-icon><InfoFilled /></el-icon>
+                        <span>实际存储路径: <code>{{ scrapeForm.params.oss_path ? (scrapeForm.params.oss_path.endsWith('/') ? scrapeForm.params.oss_path : scrapeForm.params.oss_path + '/') : 'tasks/' }}{任务ID}/...</code></span>
+                      </div>
+                    </div>
+
                     <div class="form-item-tip">
                       <template v-if="scrapeForm.params.storage_type === 'oss'">
                         请确保已在 <el-link type="primary" :underline="false" href="/configs">系统设置</el-link> 中配置 OSS 凭据
@@ -1066,7 +1097,8 @@ const applyMatchedRule = (rule, silent = false) => {
   const syncFields = [
     "engine", "wait_for", "timeout", "viewport", "stealth", 
     "save_html", "screenshot", "is_fullscreen", "block_images",
-    "intercept_apis", "intercept_continue", "proxy", "cookies"
+    "intercept_apis", "intercept_continue", "proxy", "cookies",
+    "storage_type", "mongo_collection", "oss_path"
   ]
   
   syncFields.forEach(field => {
@@ -1241,6 +1273,8 @@ const scrapeForm = ref({
       cookies: '',
       stealth: true,
       storage_type: 'mongo',
+      mongo_collection: '',
+      oss_path: '',
       save_html: true,
   parser: '',
   parser_config: {
@@ -2497,6 +2531,35 @@ onMounted(() => {
 }
 
 /* 原有样式保持或替换 */
+.custom-storage-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.storage-path-preview {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px dashed #e2e8f0;
+}
+
+.storage-path-preview code {
+  background: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #3b82f6;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+}
+
 .tasks-container {
   padding: 20px;
 }

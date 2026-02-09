@@ -85,7 +85,8 @@ class Worker:
             sync_fields = [
                 "engine", "wait_for", "timeout", "viewport", "stealth", 
                 "save_html", "screenshot", "is_fullscreen", "block_images",
-                "intercept_apis", "intercept_continue", "proxy"
+                "intercept_apis", "intercept_continue", "proxy",
+                "storage_type", "mongo_collection", "oss_path"
             ]
             
             for field in sync_fields:
@@ -132,7 +133,7 @@ class Worker:
                 result["parsed_data"] = parsed_data
 
             # 这里重新判断是否需要保存html
-            result["html"] = result["html"] if params.get("save_html", True) else ""
+            result["html"] = result.get("html", "") if params.get("save_html", True) else ""
 
             # 检查 Worker 是否在执行过程中被停止
             if not self.is_running:
@@ -210,6 +211,8 @@ class Worker:
         if params:
             storage_type = params.get("storage_type", "mongo")
             save_html = params.get("save_html", True)
+            oss_path = params.get("oss_path")
+            mongo_collection = params.get("mongo_collection")
             
             # 如果不保存 HTML，从结果中移除
             if not save_html:
@@ -221,7 +224,7 @@ class Worker:
                 screenshot = result.get("screenshot")
                 
                 # 上传到 OSS (如果显式指定了 OSS，则强制上传，忽略全局开关)
-                html_url, screenshot_url = oss_service.upload_task_assets(task_id, html, screenshot, force=True)
+                html_url, screenshot_url = oss_service.upload_task_assets(task_id, html, screenshot, force=True, custom_path=oss_path)
                 
                 # 更新结果：OSS 存储时，移除原始 html/screenshot 字段，仅保留 oss_ 路径
                 if html_url:
@@ -240,6 +243,25 @@ class Worker:
                     # 这样可以防止数据丢失，同时在 UI 上显示为存入 Mongo
                     result["storage_type"] = "mongo"
                     logger.warning(f"OSS upload failed for task {task_id}, falling back to MongoDB storage")
+
+            # 处理自定义 MongoDB 存储
+            # 如果提供了 mongo_collection 或者明确指定了 storage_type 为 mongo
+            if storage_type == "mongo":
+                target_collection = (mongo_collection or "tasks_results").strip()
+                try:
+                    # 确保集合名称合法且不为系统集合
+                    if target_collection and not target_collection.startswith("system."):
+                        # 避免重复保存到主 tasks 集合 (如果 target_collection 就是 tasks)
+                        if target_collection != "tasks":
+                            mongo.db[target_collection].insert_one({
+                                "task_id": task_id,
+                                "url": result.get("metadata", {}).get("url") or task_id,
+                                "result": result,
+                                "timestamp": datetime.now()
+                            })
+                            logger.info(f"Task {task_id} result also saved to collection: {target_collection}")
+                except Exception as e:
+                    logger.error(f"Failed to save task {task_id} to collection {target_collection}: {e}")
 
         mongo.tasks.update_one(
             {"task_id": task_id},

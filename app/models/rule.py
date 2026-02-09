@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
+from app.models.task import ScrapeParams, CacheConfig, StorageType
 
 class ParsingRule(BaseModel):
     """网站解析规则模型"""
@@ -24,6 +25,11 @@ class ParsingRule(BaseModel):
     intercept_apis: Optional[list] = Field(default_factory=list)
     intercept_continue: Optional[bool] = True
     proxy: Optional[Dict[str, Any]] = Field(default_factory=lambda: {"server": "", "username": "", "password": ""})
+    
+    # 存储配置
+    storage_type: StorageType = StorageType.MONGO
+    mongo_collection: Optional[str] = None
+    oss_path: Optional[str] = None
     
     cache_config: Optional[Dict[str, Any]] = Field(default_factory=lambda: {"enabled": True, "ttl": 3600}) # 缓存/去重配置
     cookies: Optional[str] = ""  # 网站 Cookies
@@ -54,6 +60,11 @@ class ParsingRuleCreate(BaseModel):
     intercept_continue: Optional[bool] = True
     proxy: Optional[Dict[str, Any]] = Field(default_factory=lambda: {"server": "", "username": "", "password": ""})
     
+    # 存储配置
+    storage_type: Optional[StorageType] = StorageType.MONGO
+    mongo_collection: Optional[str] = None
+    oss_path: Optional[str] = None
+    
     cache_config: Optional[Dict[str, Any]] = Field(default_factory=lambda: {"enabled": True, "ttl": 3600})
     cookies: Optional[str] = ""
     description: Optional[str] = ""
@@ -80,6 +91,11 @@ class ParsingRuleUpdate(BaseModel):
     intercept_apis: Optional[list] = None
     intercept_continue: Optional[bool] = None
     proxy: Optional[Dict[str, Any]] = None
+    
+    # 存储配置
+    storage_type: Optional[StorageType] = None
+    mongo_collection: Optional[str] = None
+    oss_path: Optional[str] = None
     
     cache_config: Optional[Dict[str, Any]] = None
     cookies: Optional[str] = None
