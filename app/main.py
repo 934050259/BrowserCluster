@@ -7,6 +7,7 @@ import os
 import sys
 import asyncio
 import logging
+import time
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -52,44 +53,47 @@ app.add_middleware(
     allow_headers=["*"],  # 允许所有请求头
 )
 
-# 添加请求日志中间件
-@app.middleware("http")
-async def log_requests(request, call_next):
-    import time
-    from fastapi.responses import Response
-    
-    # 记录请求开始时间
-    start_time = time.time()
-    
-    # 提取请求信息
-    client_ip = request.client.host if request.client else "unknown"
-    method = request.method
-    path = request.url.path
-    query_params = dict(request.query_params)
-    
-    # 调用下一个中间件或路由处理函数
-    response = await call_next(request)
-    
-    # 记录响应信息
-    status_code = response.status_code
-    process_time = time.time() - start_time
-    
-    # 构建日志消息
-    log_message = f"API访问日志 | {client_ip} | {method} {path} | {status_code} | {process_time:.3f}s"
-    
-    # 如果有查询参数，添加到日志中
-    if query_params:
-        log_message += f" | 查询参数: {query_params}"
-    
-    # 根据状态码选择日志级别
-    if status_code >= 500:
-        logger.error(log_message)
-    elif status_code >= 400:
-        logger.warning(log_message)
-    else:
-        logger.info(log_message)
-    
-    return response
+# 请求日志中间件 (使用原生的 ASGI 中间件以避免 BaseHTTPMiddleware 与 StreamingResponse/FileResponse 的冲突)
+class RequestLogMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        start_time = time.time()
+        
+        # 提取请求信息
+        client = scope.get("client")
+        client_ip = client[0] if client else "unknown"
+        method = scope.get("method")
+        path = scope.get("path")
+        query_string = scope.get("query_string", b"").decode()
+        
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+                process_time = time.time() - start_time
+                
+                # 构建日志消息
+                log_message = f"API访问日志 | {client_ip} | {method} {path} | {status_code} | {process_time:.3f}s"
+                if query_string:
+                    log_message += f" | 查询参数: {query_string}"
+                
+                # 根据状态码选择日志级别
+                if status_code >= 500:
+                    logger.error(log_message)
+                elif status_code >= 400:
+                    logger.warning(log_message)
+                else:
+                    logger.info(log_message)
+            
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+app.add_middleware(RequestLogMiddleware)
 
 # 注册 API 路由
 app.include_router(auth.router)

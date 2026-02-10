@@ -4,11 +4,14 @@
 提供系统配置的增删改查功能
 """
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from typing import Optional, List
 import time
 import sys
 import os
 import asyncio
+import re
+from datetime import datetime
 from app.models.config import ConfigModel
 from app.db.sqlite import sqlite_db
 from app.core.config import settings
@@ -22,56 +25,160 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/configs", tags=["Configs"])
 
 
+@router.get("/logs/dates", response_model=List[str])
+async def get_system_log_dates(current_admin: dict = Depends(get_current_admin)):
+    """
+    获取系统日志所有可用的历史日期列表
+    """
+    log_file = settings.log_file
+    log_dir = os.path.dirname(log_file)
+    if not log_dir:
+        log_dir = "."
+    
+    if not os.path.exists(log_dir):
+        return []
+    
+    base_name = os.path.basename(log_file)
+    dates = set()
+    
+    # 匹配文件名格式: app.log.YYYY-MM-DD
+    # 或者如果主日志文件本身就带日期
+    date_pattern = re.compile(r".*?(\d{4}-\d{2}-\d{2})$")
+    
+    try:
+        for filename in os.listdir(log_dir):
+            # 检查是否是该日志文件的滚动版本
+            if filename.startswith(base_name):
+                match = date_pattern.search(filename)
+                if match:
+                    dates.add(match.group(1))
+            # 或者文件名本身包含日期且与日志相关
+            elif "app" in filename and "log" in filename:
+                match = date_pattern.search(filename)
+                if match:
+                    dates.add(match.group(1))
+                    
+        # 加上今天的日期，如果主日志文件存在
+        if os.path.exists(log_file):
+            today = datetime.now().strftime("%Y-%m-%d")
+            dates.add(today)
+                
+        # 排序，倒序排列（最新的在前）
+        sorted_dates = sorted(list(dates), reverse=True)
+        return sorted_dates
+    except Exception as e:
+        logger.error(f"Error listing log dates: {e}")
+        return []
+
+
 @router.get("/logs")
 async def get_system_logs(
-    lines: int = Query(100, ge=1, le=1000),
+    lines: int = Query(100, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
     stream: bool = Query(False),
+    date: Optional[str] = Query(None, description="筛选日期 (YYYY-MM-DD)"),
+    download: bool = Query(False, description="是否下载日志文件"),
     current_admin: dict = Depends(get_current_admin)
 ):
     """
     获取系统主日志
     
     Args:
-        lines: 返回最后多少行日志
-        stream: 是否实时流式输出
+        lines: 返回多少行日志
+        offset: 从末尾跳过多少行 (用于滚动加载历史数据)
+        stream: 是否实时流式输出 (仅在 offset 为 0 且未指定 date 时生效)
+        date: 筛选日期 (YYYY-MM-DD)
+        download: 是否作为文件下载
     """
     log_file = settings.log_file
     
-    if not os.path.exists(log_file):
+    # 修复当天日期匹配逻辑
+    target_file = log_file
+    if date:
+        today = datetime.now().strftime("%Y-%m-%d")
+        # 如果是今天，直接使用主日志文件
+        if date == today:
+            target_file = log_file
+        else:
+            # 尝试匹配常见的滚动日志命名约定 app.log.YYYY-MM-DD
+            date_log_file = f"{log_file}.{date}"
+            if os.path.exists(date_log_file):
+                target_file = date_log_file
+            elif not log_file.endswith(date) and date not in log_file:
+                if not download:
+                    return StreamingResponse(iter([f"No logs found for date: {date}"]), media_type="text/plain")
+                else:
+                    raise HTTPException(status_code=404, detail=f"No logs found for date: {date}")
+
+    if not os.path.exists(target_file):
         return StreamingResponse(iter(["Waiting for system logs..."]), media_type="text/plain")
 
-    def read_last_lines(file_path, n):
+    if download:
+        filename = os.path.basename(target_file)
+        if date and not date in filename:
+            filename = f"system-{date}.log"
+        
+        def iterfile():
+            with open(target_file, mode="rb") as file_like:
+                yield from file_like
+
+        return StreamingResponse(
+            iterfile(),
+            media_type="text/plain",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+
+    def read_logs_range(file_path, lines_count, skip_count):
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                # 获取总行数 (对于大文件，这可能有点慢，但在 50000 行限制内还好)
                 all_lines = f.readlines()
-                return all_lines[-n:]
+                total = len(all_lines)
+                
+                # 计算读取范围 (从后往前)
+                end = total - skip_count
+                start = max(0, end - lines_count)
+                
+                if start >= end:
+                    return []
+                return all_lines[start:end]
         except Exception as e:
             return [f"Error reading log file: {str(e)}"]
 
-    if not stream:
-        content = "".join(read_last_lines(log_file, lines))
+    # 如果指定了 offset 或指定了日期且非流式，使用范围读取实现“滚动加载”
+    if not stream or offset > 0 or (date and date != datetime.now().strftime("%Y-%m-%d")):
+        content = "".join(read_logs_range(target_file, lines, offset))
         return StreamingResponse(iter([content]), media_type="text/plain")
 
-    # 流式输出实现 (类似 tail -f)
+    # 流式输出实现 (仅对主日志文件有效)
     async def log_generator():
         # 先发送最后 N 行
-        last_lines = read_last_lines(log_file, lines)
+        def read_last_lines(file_path, n):
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    all_lines = f.readlines()
+                    return all_lines[-n:]
+            except:
+                return []
+
+        last_lines = read_last_lines(target_file, lines)
         for line in last_lines:
             yield line
             
-        # 持续监听新内容
-        try:
-            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                # 移动到文件末尾
-                f.seek(0, os.SEEK_END)
-                while True:
-                    line = f.readline()
-                    if not line:
-                        await asyncio.sleep(0.5)
-                        continue
-                    yield line
-        except Exception as e:
-            yield f"\n[Log Stream Error: {str(e)}]"
+        # 持续监听新内容 (仅当是主日志文件且无日期筛选时)
+        if not date or target_file == log_file:
+            try:
+                with open(target_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    # 移动到文件末尾
+                    f.seek(0, os.SEEK_END)
+                    while True:
+                        line = f.readline()
+                        if not line:
+                            await asyncio.sleep(0.5)
+                            continue
+                        yield line
+            except Exception as e:
+                yield f"\n[Log Stream Error: {str(e)}]"
 
     return StreamingResponse(log_generator(), media_type="text/plain")
 

@@ -105,9 +105,11 @@ class Settings(BaseSettings):
             
             # 创建一个临时实例以获取基准值（代码默认值 + .env 环境变量）
             # 这确保了如果某个配置从数据库删除，它能恢复到基准值
-            base_settings = Settings()
+            # 使用 type(self)() 创建新实例，避免直接引用 Settings 类名（虽然在这里没区别）
+            base_settings = self.__class__()
             
             updated_count = 0
+            reset_count = 0
             # 遍历所有定义的字段
             for key in self.model_fields.keys():
                 # 如果数据库中有该配置，使用数据库的值覆盖
@@ -120,10 +122,10 @@ class Settings(BaseSettings):
                     try:
                         # 类型转换
                         if target_type == bool:
-                            if str(value).lower() in ('true', '1', 'yes', 'on'):
-                                new_value = True
+                            if isinstance(value, bool):
+                                new_value = value
                             else:
-                                new_value = False
+                                new_value = str(value).lower() in ('true', '1', 'yes', 'on')
                         elif target_type == int:
                             new_value = int(value)
                         elif target_type == float:
@@ -139,11 +141,15 @@ class Settings(BaseSettings):
                         continue
                 else:
                     # 如果数据库中没有该配置，还原为基准值
-                    setattr(self, key, getattr(base_settings, key))
+                    # 这解决了删除数据库项后内存中仍保留旧值的问题
+                    base_value = getattr(base_settings, key)
+                    if getattr(self, key) != base_value:
+                        setattr(self, key, base_value)
+                        reset_count += 1
             
-            if updated_count > 0:
-                print(f"Loaded {updated_count} configurations from SQLite database")
-                
+            if updated_count > 0 or reset_count > 0:
+                print(f"Configuration sync complete: {updated_count} updated from DB, {reset_count} reset to defaults")
+                    
         except Exception as e:
             print(f"Error loading configs from DB: {e}")
 

@@ -222,24 +222,52 @@
     <el-drawer
       v-model="logDrawerVisible"
       title="系统主日志"
-      size="50%"
+      size="60%"
       @closed="stopLogStream"
       class="log-drawer"
     >
       <div class="log-header">
-        <el-checkbox v-model="autoScroll">自动滚动</el-checkbox>
-        <el-button size="small" @click="logContent = ''">清空屏幕</el-button>
-        <el-button size="small" type="primary" @click="startLogStream">重新连接</el-button>
+        <div class="log-controls-left">
+          <el-select
+            v-model="selectedLogDate"
+            placeholder="实时日志"
+            size="small"
+            style="width: 140px; margin-right: 10px;"
+            clearable
+            @change="handleLogDateChange"
+          >
+            <el-option
+              v-for="date in availableLogDates"
+              :key="date"
+              :label="date"
+              :value="date"
+            />
+          </el-select>
+          <el-checkbox v-model="autoScroll" :disabled="!!selectedLogDate">自动滚动</el-checkbox>
+        </div>
+        <div class="log-controls-right">
+          <el-button size="small" @click="logContent = ''">清空屏幕</el-button>
+          <el-button size="small" type="primary" @click="startLogStream" :disabled="!!selectedLogDate">重新连接</el-button>
+          <el-button size="small" type="success" @click="downloadLog">
+            <el-icon style="margin-right: 4px;"><Download /></el-icon>导出
+          </el-button>
+        </div>
       </div>
-      <div class="log-container" ref="logContainer">
-        <pre class="log-content">{{ logContent || '正在加载日志...' }}</pre>
+      <div 
+        class="log-container" 
+        ref="logContainer" 
+        @scroll="handleScroll"
+      >
+        <div v-if="loadingMore" class="loading-more">正在加载历史日志...</div>
+        <div v-if="noMoreLogs" class="no-more">已加载全部历史日志</div>
+        <pre class="log-content">{{ logContent || (selectedLogDate ? '该日期暂无日志' : '正在加载日志...') }}</pre>
       </div>
     </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Plus, Refresh, Delete, Setting, Timer, Search, 
@@ -264,6 +292,7 @@ const configs = ref([])
 const schema = ref([])
 const searchQuery = ref('')
 const activeTab = ref('all')
+const selectedLogDate = ref('')
 
 // 分类定义
 const categories = {
@@ -402,7 +431,29 @@ const logDrawerVisible = ref(false)
 const logContent = ref('')
 const autoScroll = ref(true)
 const logContainer = ref(null)
+const availableLogDates = ref([])
+const loadingMore = ref(false)
+const noMoreLogs = ref(false)
+let currentOffset = ref(0)
 let logAbortController = null
+const PAGE_SIZE = 100
+
+const fetchAvailableLogDates = async () => {
+  try {
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    const response = await fetch('/api/v1/configs/logs/dates', { headers })
+    if (response.ok) {
+      availableLogDates.value = await response.json()
+    }
+  } catch (error) {
+    console.error('Failed to fetch log dates:', error)
+  }
+}
 
 const showAddDialog = ref(false)
 const showEditDialog = ref(false)
@@ -608,8 +659,88 @@ const handleExport = async () => {
 // 日志处理方法
 const handleViewSystemLogs = () => {
   logContent.value = ''
+  selectedLogDate.value = ''
   logDrawerVisible.value = true
+  fetchAvailableLogDates()
   startLogStream()
+}
+
+const handleLogDateChange = (val) => {
+  logContent.value = ''
+  currentOffset.value = 0
+  noMoreLogs.value = false
+  startLogStream()
+}
+
+const handleScroll = async (e) => {
+  if (autoScroll.value) {
+    // 检查是否手动向上滚动，如果是则关闭自动滚动
+    const { scrollTop, scrollHeight, clientHeight } = e.target
+    if (scrollTop + clientHeight < scrollHeight - 50) {
+      autoScroll.value = false
+    }
+  }
+
+  // 向上滚动加载更多
+  if (e.target.scrollTop === 0 && !loadingMore.value && !noMoreLogs.value) {
+    await loadMoreLogs()
+  }
+}
+
+const loadMoreLogs = async () => {
+  if (loadingMore.value || noMoreLogs.value) return
+  
+  loadingMore.value = true
+  const oldScrollHeight = logContainer.value.scrollHeight
+  
+  try {
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    // 增加 offset
+    currentOffset.value += PAGE_SIZE
+    
+    let url = `/api/v1/configs/logs?lines=${PAGE_SIZE}&offset=${currentOffset.value}`
+    if (selectedLogDate.value) {
+      url += `&date=${selectedLogDate.value}`
+    }
+    
+    const response = await fetch(url, { headers })
+    if (response.ok) {
+      const text = await response.text()
+      if (text.trim()) {
+        logContent.value = text + logContent.value
+        // 保持滚动位置
+        nextTick(() => {
+          if (logContainer.value) {
+            logContainer.value.scrollTop = logContainer.value.scrollHeight - oldScrollHeight
+          }
+        })
+      } else {
+        noMoreLogs.value = true
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load more logs:', error)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+const downloadLog = () => {
+  const token = localStorage.getItem('token')
+  const dateParam = selectedLogDate.value ? `&date=${selectedLogDate.value}` : ''
+  const url = `/api/v1/configs/logs?download=true${dateParam}&token=${token}`
+  
+  const link = document.createElement('a')
+  link.href = url
+  link.target = '_blank'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 const startLogStream = async () => {
@@ -626,7 +757,16 @@ const startLogStream = async () => {
       headers['Authorization'] = `Bearer ${token}`
     }
     
-    const response = await fetch(`/api/v1/configs/logs?stream=true&lines=100`, {
+    // 构建 URL
+    let url = '/api/v1/configs/logs?'
+    if (selectedLogDate.value) {
+      // 选择日期时，先获取最后一页
+      url += `date=${selectedLogDate.value}&lines=${PAGE_SIZE}&offset=0`
+    } else {
+      url += `stream=true&lines=${PAGE_SIZE}`
+    }
+    
+    const response = await fetch(url, {
       headers,
       signal: logAbortController.signal
     })
@@ -646,11 +786,6 @@ const startLogStream = async () => {
       
       const chunk = decoder.decode(value, { stream: true })
       logContent.value += chunk
-      
-      // 限制日志显示长度
-      if (logContent.value.length > 50000) {
-        logContent.value = logContent.value.substring(logContent.value.length - 50000)
-      }
       
       if (autoScroll.value) {
         scrollToBottom()
@@ -796,19 +931,33 @@ onMounted(() => {
 .log-header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
   padding: 10px 20px;
   background-color: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
 }
 
+.log-controls-left, .log-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .log-container {
-  height: calc(100% - 45px);
+  height: calc(100% - 50px);
   background-color: #0f172a;
   color: #e2e8f0;
   padding: 15px;
   overflow-y: auto;
   font-family: 'Fira Code', 'Courier New', Courier, monospace;
+  position: relative;
+}
+
+.loading-more, .no-more {
+  text-align: center;
+  padding: 10px;
+  color: #888;
+  font-size: 12px;
 }
 
 .log-content {

@@ -68,15 +68,46 @@
       destroy-on-close
       @close="stopLogStream"
     >
-      <div class="log-viewer" ref="logContainer">
+      <div class="log-toolbar">
+        <div class="toolbar-left">
+          <el-select
+            v-model="selectedLogDate"
+            placeholder="实时日志"
+            size="small"
+            style="width: 140px; margin-right: 10px;"
+            clearable
+            @change="handleLogDateChange"
+          >
+            <el-option
+              v-for="date in availableLogDates"
+              :key="date"
+              :label="date"
+              :value="date"
+            />
+          </el-select>
+          <el-checkbox v-model="autoScroll" :disabled="!!selectedLogDate">自动滚动</el-checkbox>
+        </div>
+        <div class="toolbar-right">
+          <el-button size="small" @click="logContent = ''">清空屏幕</el-button>
+          <el-button size="small" type="primary" @click="startLogStream" :disabled="!!selectedLogDate">重新连接</el-button>
+          <el-button size="small" type="success" @click="downloadLog">
+            <el-icon style="margin-right: 4px;"><Download /></el-icon>导出
+          </el-button>
+        </div>
+      </div>
+      <div 
+        ref="logContainer" 
+        class="log-viewer" 
+        @scroll="handleScroll"
+      >
+        <div v-if="loadingMore" class="loading-more">正在加载历史日志...</div>
+        <div v-if="noMoreLogs" class="no-more">已加载全部历史日志</div>
         <pre v-if="logContent">{{ logContent }}</pre>
-        <el-empty v-else description="暂无日志或正在加载..." />
+        <el-empty v-else :description="selectedLogDate ? '该日期暂无日志' : '暂无日志或正在加载...'" />
       </div>
       <template #footer>
         <div class="drawer-footer">
-          <el-checkbox v-model="autoScroll">自动滚动</el-checkbox>
-          <el-button @click="stopLogStream">停止</el-button>
-          <el-button type="primary" @click="startLogStream">重新连接</el-button>
+          <el-button @click="logDrawerVisible = false">关闭</el-button>
         </div>
       </template>
     </el-drawer>
@@ -111,8 +142,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { Plus, Warning } from '@element-plus/icons-vue'
+import { ref, onMounted, nextTick } from 'vue'
+import { Plus, Warning, Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getNodes, createNode, updateNode, deleteNode, startNode, stopNode } from '../api'
 import dayjs from 'dayjs'
@@ -130,9 +161,33 @@ const formRef = ref(null)
 const logDrawerVisible = ref(false)
 const currentLogNodeId = ref('')
 const logContent = ref('')
-const logContainer = ref(null)
 const autoScroll = ref(true)
+const logContainer = ref(null)
+const selectedLogDate = ref('')
+const availableLogDates = ref([])
+const loadingMore = ref(false)
+const noMoreLogs = ref(false)
+let currentOffset = ref(0)
 let logAbortController = null
+const PAGE_SIZE = 100
+
+const fetchAvailableLogDates = async (nodeId) => {
+  availableLogDates.value = [] // 重置日期列表，确保不共用
+  try {
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    const response = await fetch(`/api/v1/nodes/${nodeId}/logs/dates`, { headers })
+    if (response.ok) {
+      availableLogDates.value = await response.json()
+    }
+  } catch (error) {
+    console.error('Failed to fetch node log dates:', error)
+  }
+}
 
 const form = ref({
   node_id: '',
@@ -223,8 +278,88 @@ const handleStop = async (row) => {
 const handleViewLogs = (row) => {
   currentLogNodeId.value = row.node_id
   logContent.value = ''
+  selectedLogDate.value = ''
+  currentOffset.value = 0
+  noMoreLogs.value = false
   logDrawerVisible.value = true
+  fetchAvailableLogDates(row.node_id)
   startLogStream()
+}
+
+const handleLogDateChange = (val) => {
+  logContent.value = ''
+  currentOffset.value = 0
+  noMoreLogs.value = false
+  startLogStream()
+}
+
+const handleScroll = async (e) => {
+  if (autoScroll.value) {
+    const { scrollTop, scrollHeight, clientHeight } = e.target
+    if (scrollTop + clientHeight < scrollHeight - 50) {
+      autoScroll.value = false
+    }
+  }
+
+  if (e.target.scrollTop === 0 && !loadingMore.value && !noMoreLogs.value) {
+    await loadMoreLogs()
+  }
+}
+
+const loadMoreLogs = async () => {
+  if (loadingMore.value || noMoreLogs.value) return
+  
+  loadingMore.value = true
+  const oldScrollHeight = logContainer.value.scrollHeight
+  const nodeId = currentLogNodeId.value
+  
+  try {
+    const token = localStorage.getItem('token')
+    const headers = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+    
+    currentOffset.value += PAGE_SIZE
+    
+    let url = `/api/v1/nodes/${nodeId}/logs?lines=${PAGE_SIZE}&offset=${currentOffset.value}`
+    if (selectedLogDate.value) {
+      url += `&date=${selectedLogDate.value}`
+    }
+    
+    const response = await fetch(url, { headers })
+    if (response.ok) {
+      const text = await response.text()
+      if (text.trim()) {
+        logContent.value = text + logContent.value
+        nextTick(() => {
+          if (logContainer.value) {
+            logContainer.value.scrollTop = logContainer.value.scrollHeight - oldScrollHeight
+          }
+        })
+      } else {
+        noMoreLogs.value = true
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load more logs:', error)
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+const downloadLog = () => {
+  const token = localStorage.getItem('token')
+  const nodeId = currentLogNodeId.value
+  const dateParam = selectedLogDate.value ? `&date=${selectedLogDate.value}` : ''
+  const url = `/api/v1/nodes/${nodeId}/logs?download=true${dateParam}&token=${token}`
+  
+  const link = document.createElement('a')
+  link.href = url
+  link.target = '_blank'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 const startLogStream = async () => {
@@ -242,7 +377,15 @@ const startLogStream = async () => {
       headers['Authorization'] = `Bearer ${token}`
     }
     
-    const response = await fetch(`/api/v1/nodes/${nodeId}/logs?stream=true&lines=100`, {
+    // 构建 URL
+    let url = `/api/v1/nodes/${nodeId}/logs?`
+    if (selectedLogDate.value) {
+      url += `date=${selectedLogDate.value}&lines=${PAGE_SIZE}&offset=0`
+    } else {
+      url += `stream=true&lines=${PAGE_SIZE}`
+    }
+    
+    const response = await fetch(url, {
       headers,
       signal: logAbortController.signal
     })
@@ -262,11 +405,6 @@ const startLogStream = async () => {
       
       const chunk = decoder.decode(value, { stream: true })
       logContent.value += chunk
-      
-      // 限制日志显示长度，防止内存占用过大
-      if (logContent.value.length > 50000) {
-        logContent.value = logContent.value.substring(logContent.value.length - 50000)
-      }
       
       if (autoScroll.value) {
         scrollToBottom()
@@ -350,16 +488,39 @@ onMounted(() => {
   border-radius: 8px;
 }
 
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.toolbar-left, .toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .log-viewer {
   background-color: #1e1e1e;
   color: #d4d4d4;
   padding: 15px;
-  height: calc(100vh - 200px);
+  height: calc(100vh - 210px);
   overflow-y: auto;
   font-family: 'Courier New', Courier, monospace;
   font-size: 13px;
   line-height: 1.5;
   border-radius: 4px;
+  position: relative;
+}
+
+.loading-more, .no-more {
+  text-align: center;
+  padding: 10px;
+  color: #888;
+  font-size: 12px;
 }
 
 .log-viewer pre {
