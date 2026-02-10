@@ -310,3 +310,29 @@ export const deleteNode = async (nodeId) => {
 export const getNodeLogs = (nodeId, params) => {
   return api.get(`/nodes/${nodeId}/logs`, { params, responseType: 'text' })
 }
+
+// Scrapers API
+export const getScrapers = async () => {
+  const response = await api.get('/scrapers/')
+  return response.data
+}
+
+export const createScraper = async (data) => {
+  const response = await api.post('/scrapers/', data)
+  return response.data
+}
+
+export const updateScraper = async (id, data) => {
+  const response = await api.put(`/scrapers/${id}`, data)
+  return response.data
+}
+
+export const deleteScraper = async (id) => {
+  const response = await api.delete(`/scrapers/${id}`)
+  return response.data
+}
+
+export const testScraper = async (data) => {
+  const response = await api.post('/scrapers/test', data)
+  return response.data
+}

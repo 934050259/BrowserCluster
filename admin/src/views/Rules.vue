@@ -101,6 +101,7 @@
       destroy-on-close
       top="8vh"
       class="config-dialog"
+      append-to-body
     >
       <el-form :model="form" label-width="120px" :rules="formRules" ref="formRef">
         <el-tabs v-model="activeTab" class="config-tabs">
@@ -606,13 +607,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, watch } from 'vue'
+import { ref, onMounted, reactive, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Delete, MagicStick, Connection, Search, Timer, Monitor, Setting, Warning } from '@element-plus/icons-vue'
+import { Plus, Delete, MagicStick, Connection, Search, Timer, Monitor, Setting, Warning, InfoFilled, Collection, FolderOpened } from '@element-plus/icons-vue'
 import { getRules, createRule, updateRule, deleteRule, getProxyStats } from '@/api'
 
 const rules = ref([])
 const loading = ref(false)
+const route = useRoute()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const submitting = ref(false)
@@ -911,8 +914,30 @@ const formatDuration = (seconds) => {
   return `${Math.floor(seconds / 86400)}天`
 }
 
+const checkRouteParams = () => {
+  // 处理从采集任务页面跳转过来的情况
+  if (route.query.action === 'add' && route.query.domain) {
+    // 使用 nextTick 确保页面初次渲染完成后再打开弹窗，避免视觉上的闪烁或卡顿
+    nextTick(() => {
+      setTimeout(() => {
+        handleAdd()
+        form.domain = route.query.domain
+      }, 150)
+    })
+  } else if (route.query.domain) {
+    filterForm.domain = route.query.domain
+    handleFilter()
+  }
+}
+
+// 监听路由参数变化，确保多次点击“去配置规则”都能生效
+watch(() => route.query, () => {
+  checkRouteParams()
+}, { deep: true })
+
 onMounted(() => {
   fetchRules()
+  checkRouteParams()
 })
 </script>
 

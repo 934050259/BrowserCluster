@@ -6,6 +6,7 @@ import Schedules from '../views/Schedules.vue'
 import Stats from '../views/Stats.vue'
 import Configs from '../views/Configs.vue'
 import Rules from '../views/Rules.vue'
+import Scrapers from '../views/Scrapers.vue'
 import Proxies from '../views/Proxies.vue'
 import Nodes from '../views/Nodes.vue'
 import Login from '../views/Login.vue'
@@ -21,6 +22,7 @@ const routes = [
   { path: '/stats', component: Stats },
   { path: '/configs', component: Configs, meta: { adminOnly: true } },
   { path: '/rules', component: Rules, meta: { adminOnly: true } },
+  { path: '/scrapers', component: Scrapers, meta: { adminOnly: true } },
   { path: '/proxies', component: Proxies, meta: { adminOnly: true } },
   { path: '/nodes', component: Nodes, meta: { adminOnly: true } },
   { path: '/users', component: Users, meta: { adminOnly: true } }

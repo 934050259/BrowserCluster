@@ -1,7 +1,11 @@
 <template>
   <div class="app-wrapper">
     <template v-if="isLoginPage">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <transition name="fade-transform" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
     </template>
     <el-container v-else class="main-container">
       <!-- Sidebar -->
@@ -46,6 +50,10 @@
               <el-menu-item index="rules" v-if="isAdmin">
                 <el-icon><Connection /></el-icon>
                 <template #title>网站配置</template>
+              </el-menu-item>
+              <el-menu-item index="scrapers" v-if="isAdmin">
+                <el-icon><Compass /></el-icon>
+                <template #title>站点采集</template>
               </el-menu-item>
               <el-menu-item index="proxies" v-if="isAdmin">
                 <el-icon><Service /></el-icon>
@@ -171,8 +179,10 @@
         <!-- Main Content -->
         <el-main class="main-content">
           <router-view v-slot="{ Component }">
-            <transition name="fade-transform" mode="out-in">
-              <component :is="Component" />
+            <transition name="fade-transform">
+              <keep-alive>
+                <component :is="Component" />
+              </keep-alive>
             </transition>
           </router-view>
         </el-main>
@@ -185,7 +195,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { 
-  House, List, DataLine, Monitor, Setting, User, Service, Timer, Connection,
+  House, List, DataLine, Monitor, Setting, User, Service, Timer, Connection, Compass,
   Expand, Fold, CircleCheck, CircleClose, Refresh,
   QuestionFilled, FullScreen
 } from '@element-plus/icons-vue'
@@ -216,6 +226,7 @@ const currentRouteName = computed(() => {
     '/tasks': '任务管理',
     '/task-records': '采集记录',
     '/rules': '网站配置',
+    '/scrapers': '站点采集',
     '/proxies': '代理管理',
     '/schedules': '定时任务',
     '/stats': '数据统计',
@@ -295,6 +306,24 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   background-color: #f0f2f5;
+}
+
+/* Fade Transform Transition */
+.fade-transform-enter-active,
+.fade-transform-leave-active {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: absolute;
+  width: calc(100% - 40px); /* 减去 el-main 的 padding */
+}
+
+.fade-transform-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fade-transform-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 
 .app-wrapper {

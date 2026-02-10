@@ -134,7 +134,7 @@ class Worker:
                     logger.warning(f"Task {task_id} successful but HTML content is empty, parser might fail")
                 
                 logger.info(f"Parsing content for task {task_id} using {parser_type}")
-                parsed_data = await parser_service.parse(html_content, parser_type, parser_config)
+                parsed_data = await parser_service.parse(html_content, parser_type, parser_config, base_url=url)
                 result["parsed_data"] = parsed_data
 
             # 这里重新判断是否需要保存html
@@ -428,17 +428,8 @@ class Worker:
     def _check_drission_idle(self):
         """检查并清理空闲的 DrissionPage 实例"""
         try:
-            # 如果浏览器本身就没打开，直接返回
-            if not drission_manager.is_active:
-                return
-
-            idle_timeout = settings.browser_idle_timeout # 使用配置的超时时间
-            current_time = time.time()
-            last_used = drission_manager.last_used_time
-            
-            if last_used > 0 and (current_time - last_used) > idle_timeout:
-                logger.info(f"DrissionPage idle for {int(current_time - last_used)}s, closing...")
-                drission_manager.close_browser()
+            # 使用 DrissionManager 自带的检查方法
+            drission_manager.check_idle(timeout=settings.browser_idle_timeout)
         except Exception as e:
             logger.error(f"Error in _check_drission_idle: {e}")
 

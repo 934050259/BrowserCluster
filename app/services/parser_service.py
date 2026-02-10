@@ -15,6 +15,7 @@ except ImportError:
     GNE_AVAILABLE = False
 from openai import AsyncOpenAI
 from lxml import html as lxml_html
+from urllib.parse import urljoin
 from app.core.config import settings
 import re
 
@@ -49,14 +50,15 @@ class ParserService:
             
         return self.llm_client
 
-    async def parse(self, html: str, parser_type: str, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def parse(self, html: str, parser_type: str, config: Optional[Dict[str, Any]] = None, base_url: Optional[str] = None) -> Dict[str, Any]:
         """
         解析 HTML 内容
 
         Args:
             html: HTML 字符串
-            parser_type: 解析器类型 ('gne' 或 'llm')
+            parser_type: 解析器类型 ('gne' 或 'llm' 或 'xpath')
             config: 解析配置
+            base_url: 基础 URL，用于拼接相对链接
 
         Returns:
             Dict: 解析后的结构化数据
@@ -69,7 +71,7 @@ class ParserService:
         elif parser_type == "llm":
             return await self._parse_with_llm(html, config)
         elif parser_type == "xpath":
-            return self._parse_with_xpath(html, config)
+            return self._parse_with_xpath(html, config, base_url)
         else:
             return {"error": f"Unsupported parser type: {parser_type}"}
 
@@ -95,7 +97,7 @@ class ParserService:
             logger.error(f"GNE extraction failed: {e}")
             return {"error": f"GNE extraction failed: {str(e)}"}
 
-    def _parse_with_xpath(self, html: str, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _parse_with_xpath(self, html: str, config: Optional[Dict[str, Any]] = None, base_url: Optional[str] = None) -> Dict[str, Any]:
         """使用 XPath 解析网页"""
         if not config or not config.get("rules"):
             return {"error": "XPath rules not configured"}
@@ -116,17 +118,31 @@ class ParserService:
                         # 如果是多个元素，提取文本并合并
                         texts = []
                         for el in elements:
+                            val = ""
                             if isinstance(el, str):
-                                texts.append(el.strip())
+                                val = el.strip()
                             else:
-                                texts.append(el.text_content().strip())
+                                val = el.text_content().strip()
+                            
+                            # 如果字段名包含 link/url/image/src/href 且有 base_url，尝试拼接
+                            if base_url and any(k in field.lower() for k in ["link", "url", "image", "src", "href"]) and val and not val.startswith(('http://', 'https://', 'mailto:', 'tel:')):
+                                val = urljoin(base_url, val)
+                                
+                            texts.append(val)
                         result[field] = " ".join(filter(None, texts))
                     else:
                         # 单个结果
+                        val = ""
                         if isinstance(elements, str):
-                            result[field] = elements.strip()
+                            val = elements.strip()
                         else:
-                            result[field] = elements.text_content().strip()
+                            val = elements.text_content().strip()
+                        
+                        # 如果字段名包含 link/url/image/src/href 且有 base_url，尝试拼接
+                        if base_url and any(k in field.lower() for k in ["link", "url", "image", "src", "href"]) and val and not val.startswith(('http://', 'https://', 'mailto:', 'tel:')):
+                            val = urljoin(base_url, val)
+                            
+                        result[field] = val
                 except Exception as e:
                     logger.warning(f"XPath extraction failed for field {field}: {e}")
                     result[field] = f"Error: {str(e)}"

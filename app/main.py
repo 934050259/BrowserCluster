@@ -24,7 +24,7 @@ if sys.platform == 'win32':
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
-from app.api import scrape, tasks, stats, admin, nodes, auth, users, rules, schedules, proxy
+from app.api import scrape, tasks, stats, admin, nodes, auth, users, rules, schedules, proxy, scrapers
 from app.db.mongo import mongo
 from app.db.redis import redis_client
 from app.core.config import settings
@@ -106,6 +106,27 @@ app.include_router(nodes.router)
 app.include_router(rules.router)
 app.include_router(schedules.router)
 app.include_router(proxy.router)
+app.include_router(scrapers.router)
+
+
+async def browser_idle_check():
+    """后台任务：定期检查并关闭空闲浏览器实例，释放内存"""
+    from app.core.drission_browser import drission_manager
+    from app.core.browser import browser_manager
+    
+    logger.info("Starting background browser idle check loop...")
+    while True:
+        try:
+            # 检查 DrissionPage (同步方法在线程中运行)
+            await asyncio.to_thread(drission_manager.check_idle, timeout=settings.browser_idle_timeout)
+            
+            # 检查 Playwright (异步方法)
+            await browser_manager.check_idle_browser()
+        except Exception as e:
+            logger.error(f"Error in browser_idle_check: {e}")
+        
+        # 每 60 秒检查一次
+        await asyncio.sleep(60)
 
 
 @app.on_event("startup")
@@ -129,6 +150,9 @@ async def startup_event():
     
     # 启动定时任务调度器
     scheduler_service.start()
+    
+    # 启动浏览器空闲检查后台任务
+    asyncio.create_task(browser_idle_check())
 
 
 @app.on_event("shutdown")

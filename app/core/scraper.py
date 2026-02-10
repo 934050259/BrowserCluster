@@ -9,8 +9,9 @@ import re
 import json
 import asyncio
 import logging
-from typing import Dict, Any, List
-from urllib.parse import urlparse
+from typing import Dict, Any, List, Optional
+from urllib.parse import urlparse, urljoin
+from lxml import html as lxml_html
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright_stealth import Stealth
@@ -25,6 +26,107 @@ logger = logging.getLogger(__name__)
 
 class Scraper:
     """网页抓取器"""
+
+    async def scrape_list(
+        self,
+        url: str,
+        list_xpath: str,
+        title_xpath: str,
+        link_xpath: str,
+        time_xpath: Optional[str] = None,
+        params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        抓取列表页数据
+        
+        Args:
+            url: 列表页 URL
+            list_xpath: 列表项容器 XPath
+            title_xpath: 标题 XPath (相对于列表项)
+            link_xpath: 链接 XPath (相对于列表项)
+            time_xpath: 时间 XPath (相对于列表项)
+            params: 抓取参数 (engine, timeout, wait_for_selector 等)
+            
+        Returns:
+            Dict: 包含 items 列表和 html 内容的结果
+        """
+        params = params or {}
+        # 强制使用 DrissionPage 验证规则时的逻辑
+        # 如果是实际采集，可能会根据 params["engine"] 选择引擎
+        
+        # 1. 获取页面内容
+        html_content = ""
+        engine = params.get("engine") or settings.browser_engine
+        
+        if engine == "drissionpage":
+            html_content = await self.validate_rules_with_drission(
+                url=url,
+                wait_for_selector=params.get("wait_for_selector"),
+                timeout=int((params.get("wait_timeout") or 30000) / 1000),
+                no_images=params.get("no_images", True),
+                no_css=params.get("no_css", True)
+            )
+        else:
+            # 使用 Playwright 抓取
+            res = await self.scrape(url, params, "internal")
+            if res.get("status") == "success":
+                html_content = res.get("html", "")
+            else:
+                return {"status": "failed", "error": res.get("error")}
+        
+        if not html_content:
+            return {"status": "failed", "error": "Failed to get HTML content"}
+            
+        # 2. 解析列表项
+        try:
+            tree = lxml_html.fromstring(html_content)
+            items = []
+            containers = tree.xpath(list_xpath)
+            
+            for container in containers:
+                item = {}
+                
+                def extract_one(xpath_str, default=""):
+                    if not xpath_str: return default
+                    try:
+                        res = container.xpath(xpath_str)
+                        if not res: return default
+                        if isinstance(res, list):
+                            texts = []
+                            for r in res:
+                                if isinstance(r, str): texts.append(r.strip())
+                                elif hasattr(r, 'text_content'): texts.append(r.text_content().strip())
+                                else: texts.append(str(r))
+                            return " ".join(filter(None, texts))
+                        if isinstance(res, str): return res.strip()
+                        if hasattr(res, 'text_content'): return res.text_content().strip()
+                        return str(res).strip()
+                    except Exception:
+                        return default
+
+                item['title'] = extract_one(title_xpath)
+                link = extract_one(link_xpath)
+                if link:
+                    # 拼接完整链接
+                    item['link'] = urljoin(url, link)
+                else:
+                    item['link'] = ""
+                    
+                if time_xpath:
+                    item['time'] = extract_one(time_xpath)
+                
+                if item.get('title') or item.get('link'):
+                    items.append(item)
+                    
+            return {
+                "status": "success",
+                "html": html_content,
+                "items": items,
+                "count": len(items)
+            }
+        except Exception as e:
+            logger.error(f"Failed to parse list: {e}")
+            return {"status": "failed", "error": f"Parse error: {str(e)}"}
 
     async def scrape(
         self,
@@ -367,18 +469,18 @@ class Scraper:
         start_time = time.time()
         logger.info(f"Scraping with DrissionPage (singleton): {url}")
         
-        # 获取单例浏览器实例
-        browser = drission_manager.get_browser(params)
-        
-        # 创建新标签页
+        # 使用线程安全的方法创建标签页，并自动更新最后使用时间
         tab = None
         try:
             # 设置超时 (DrissionPage 默认 10s)
             timeout_ms = params.get("timeout", settings.default_timeout)
             timeout_s = timeout_ms / 1000
 
-            # 创建一个新标签页
-            tab = browser.new_tab()
+            # 创建一个新标签页，支持资源拦截配置
+            tab = drission_manager.create_tab(
+                no_images=params.get("no_images", False),
+                no_css=params.get("no_css", False)
+            )
             
             # 在新标签页中访问 URL，并设置超时
             tab.get(url, timeout=timeout_s)
@@ -472,6 +574,68 @@ class Scraper:
                     tab.close()
                 except:
                     pass
+
+    async def validate_rules_with_drission(
+        self,
+        url: str,
+        wait_for_selector: str = None,
+        timeout: int = 30,
+        no_images: bool = False,
+        no_css: bool = False
+    ) -> str:
+        """
+        使用 DrissionPage 验证抓取规则 (获取渲染后的 HTML)
+        独立函数，确保资源正确管理和冲突处理
+        """
+        return await asyncio.to_thread(
+            self._sync_validate_with_drission,
+            url,
+            wait_for_selector,
+            timeout,
+            no_images,
+            no_css
+        )
+
+    def _sync_validate_with_drission(
+        self,
+        url: str,
+        wait_for_selector: str = None,
+        timeout: int = 30,
+        no_images: bool = False,
+        no_css: bool = False
+    ) -> str:
+        """同步执行 DrissionPage 验证"""
+        tab = None
+        try:
+            # 使用线程安全的方法创建标签页
+            tab = drission_manager.create_tab(no_images=no_images, no_css=no_css)
+            
+            # 访问页面
+            tab.get(url, timeout=timeout)
+            
+            # 等待特定元素
+            if wait_for_selector:
+                try:
+                    tab.wait.ele_displayed(wait_for_selector, timeout=timeout)
+                except Exception as e:
+                    logger.warning(f"Wait for selector {wait_for_selector} timeout: {e}")
+            
+            # 简单的 Cloudflare 检查
+            if "checking your browser" in tab.title.lower() or "just a moment" in tab.title.lower():
+                logger.info("Encountered Cloudflare challenge in validation, waiting...")
+                time.sleep(5)
+            
+            return tab.html
+            
+        except Exception as e:
+            logger.error(f"Validation fetch failed: {e}")
+            raise e
+        finally:
+            if tab:
+                try:
+                    tab.close()
+                except Exception as e:
+                    logger.warning(f"Error closing validation tab: {e}")
 
     async def _setup_api_interception(
         self,
