@@ -32,6 +32,9 @@ from app.core.logger import setup_logging
 from app.services.node_manager import node_manager
 from app.services.scheduler_service import scheduler_service
 from app.services.proxy_service import proxy_service
+from app.core.scheduler import scraper_scheduler
+from app.core.drission_browser import drission_manager
+from app.core.browser import browser_manager
 
 # 初始化日志
 setup_logging()
@@ -111,9 +114,6 @@ app.include_router(scrapers.router)
 
 async def browser_idle_check():
     """后台任务：定期检查并关闭空闲浏览器实例，释放内存"""
-    from app.core.drission_browser import drission_manager
-    from app.core.browser import browser_manager
-    
     logger.info("Starting background browser idle check loop...")
     while True:
         try:
@@ -150,6 +150,9 @@ async def startup_event():
     
     # 启动定时任务调度器
     scheduler_service.start()
+    
+    # 启动站点采集定时任务调度器
+    scraper_scheduler.start()
     
     # 启动浏览器空闲检查后台任务
     asyncio.create_task(browser_idle_check())

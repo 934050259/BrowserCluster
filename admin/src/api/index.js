@@ -336,3 +336,13 @@ export const testScraper = async (data) => {
   const response = await api.post('/scrapers/test', data)
   return response.data
 }
+
+export const aiExtractScraper = async (data) => {
+  const response = await api.post('/scrapers/ai-extract', data)
+  return response.data
+}
+
+export const runScraper = async (id) => {
+  const response = await api.post(`/scrapers/${id}/run`)
+  return response.data
+}

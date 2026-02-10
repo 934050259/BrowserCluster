@@ -37,6 +37,21 @@
             </template>
           </el-input>
         </el-form-item>
+
+        <el-form-item label="解析类型" style="width: 180px;">
+          <el-select v-model="filterForm.parser_type" placeholder="选择解析类型" clearable @change="handleFilter">
+            <el-option label="智能解析 (GNE)" value="gne" />
+            <el-option label="大模型提取 (LLM)" value="llm" />
+            <el-option label="自定义规则 (XPath)" value="xpath" />
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="提取模式" style="width: 150px;">
+          <el-select v-model="filterForm.mode" placeholder="选择模式" clearable @change="handleFilter">
+            <el-option label="详情模式" value="detail" />
+            <el-option label="列表模式" value="list" />
+          </el-select>
+        </el-form-item>
         
         <el-form-item>
           <el-button type="primary" @click="handleFilter">查询</el-button>
@@ -56,6 +71,13 @@
         <el-table-column prop="parser_type" label="解析类型" width="120">
           <template #default="{ row }">
             <el-tag :type="getParserTypeTag(row.parser_type)">{{ row.parser_type.toUpperCase() }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="提取模式" width="120">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.parser_type === 'gne' ? (row.parser_config?.mode === 'list' ? 'info' : 'success') : 'primary'" effect="plain">
+              {{ getExtractionModeText(row) }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="缓存时间" width="120">
@@ -625,7 +647,9 @@ const proxyGroups = ref(['default'])
 
 const filterForm = reactive({
   domain: '',
-  description: ''
+  description: '',
+  parser_type: '',
+  mode: ''
 })
 
 const handleFilter = () => {
@@ -635,6 +659,8 @@ const handleFilter = () => {
 const resetFilter = () => {
   filterForm.domain = ''
   filterForm.description = ''
+  filterForm.parser_type = ''
+  filterForm.mode = ''
   fetchRules()
 }
 
@@ -697,9 +723,11 @@ const formRules = {
 const fetchRules = async () => {
   loading.value = true
   try {
-    const params = {}
-    if (filterForm.domain) params.domain = filterForm.domain
-    if (filterForm.description) params.description = filterForm.description
+      const params = {}
+      if (filterForm.domain) params.domain = filterForm.domain
+      if (filterForm.description) params.description = filterForm.description
+      if (filterForm.parser_type) params.parser_type = filterForm.parser_type
+      if (filterForm.mode) params.mode = filterForm.mode
     
     const [rulesData, statsData] = await Promise.all([
       getRules(params),
@@ -900,6 +928,19 @@ const getParserTypeTag = (type) => {
     'xpath': 'primary'
   }
   return map[type] || 'info'
+}
+
+const getExtractionModeText = (row) => {
+  if (row.parser_type === 'gne') {
+    return row.parser_config?.mode === 'list' ? '列表模式' : '详情模式'
+  }
+  if (row.parser_type === 'llm') {
+    return '智能提取'
+  }
+  if (row.parser_type === 'xpath') {
+    return '自定义规则'
+  }
+  return '-'
 }
 
 const formatTime = (time) => {

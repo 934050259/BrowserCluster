@@ -5,6 +5,7 @@
 """
 import logging
 import uuid
+import asyncio
 from datetime import datetime
 from typing import List, Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -84,7 +85,7 @@ class SchedulerService:
         """执行定时任务：创建一个真实的抓取任务"""
         try:
             # 获取最新的调度配置
-            doc = mongo.schedules.find_one({"schedule_id": schedule_id})
+            doc = await asyncio.to_thread(mongo.schedules.find_one, {"schedule_id": schedule_id})
             if not doc:
                 logger.warning(f"Schedule {schedule_id} not found, skipping execution")
                 return
@@ -111,7 +112,8 @@ class SchedulerService:
             await task_service.create_task(request)
             
             # 更新最近运行时间
-            mongo.schedules.update_one(
+            await asyncio.to_thread(
+                mongo.schedules.update_one,
                 {"schedule_id": schedule_id},
                 {"$set": {"last_run": datetime.now()}}
             )

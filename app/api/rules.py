@@ -56,7 +56,7 @@ async def create_rule(rule: ParsingRuleCreate, current_user: dict = Depends(get_
 async def update_rule(rule_id: str, rule_update: ParsingRuleUpdate, current_user: dict = Depends(get_current_user)):
     """更新解析规则"""
     try:
-        update_data = {k: v for k, v in rule_update.model_dump().items() if v is not None}
+        update_data = rule_update.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now()
         
         result = mongo.parsing_rules.update_one(

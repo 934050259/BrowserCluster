@@ -1116,15 +1116,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Delete, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right, Document, UploadFilled, MagicStick, Warning, ArrowDown, RefreshRight } from '@element-plus/icons-vue'
 import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch, scrapeBatch, getRulesByDomain, getProxyStats } from '../api'
-import { watch } from 'vue'
 import dayjs from 'dayjs'
-import { fa } from 'element-plus/es/locale/index.mjs'
 
 const loading = ref(false)
+const route = useRoute()
 const tasks = ref([])
 const selectedTasks = ref([])
 const currentPage = ref(1)
@@ -1969,6 +1969,14 @@ const formatJSON = (content) => {
   }
   return JSON.stringify(content, null, 2)
 }
+
+// 监听路由变化，切换回任务列表时自动刷新
+watch(() => route.path, (newPath) => {
+  if (newPath === '/tasks') {
+    loadTasks()
+    loadProxyGroups()
+  }
+})
 
 onMounted(() => {
   loadTasks()
