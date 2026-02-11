@@ -9,9 +9,11 @@ import re
 import json
 import asyncio
 import logging
+import sys
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, urljoin
 from lxml import html as lxml_html
+from lxml import etree as lxml_etree
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright_stealth import Stealth
@@ -27,6 +29,21 @@ logger = logging.getLogger(__name__)
 class Scraper:
     """网页抓取器"""
 
+    @staticmethod
+    def validate_xpath(xpath: str) -> Optional[str]:
+        """校验 XPath 语法是否正确 (仅作为警告日志，不阻塞执行)"""
+        if not xpath:
+            return None
+        try:
+            # 尝试预编译 XPath
+            lxml_etree.XPath(xpath)
+            return None
+        except Exception as e:
+            # 浏览器引擎 (Playwright/DrissionPage) 对 XPath 的支持通常比 lxml 更宽泛
+            # 因此这里仅记录调试日志，不再返回错误字符串给前端拦截
+            logger.debug(f"XPath strict validation warning for '{xpath}': {e}")
+            return None
+
     async def scrape_list(
         self,
         url: str,
@@ -34,6 +51,197 @@ class Scraper:
         title_xpath: str,
         link_xpath: str,
         time_xpath: Optional[str] = None,
+        pagination_next_xpath: Optional[str] = None,
+        params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        抓取列表页数据，支持自动翻页（支持链接跳转和点击翻页两种模式）
+        """
+        params = params or {}
+        max_pages = params.get("max_pages", 1)
+        next_xpath = pagination_next_xpath or params.get("pagination_next_xpath")
+        
+        # 如果 max_pages > 1 且有 next_xpath，尝试进入“会话模式”抓取，以支持点击翻页
+        if max_pages > 1 and next_xpath:
+            return await self._scrape_list_session(
+                url, list_xpath, title_xpath, link_xpath, time_xpath, next_xpath, params
+            )
+            
+        # 否则回退到原有的单页/跳转模式
+        return await self._scrape_list_legacy(
+            url, list_xpath, title_xpath, link_xpath, time_xpath, next_xpath, params
+        )
+
+    async def _scrape_list_session(
+        self,
+        url: str,
+        list_xpath: str,
+        title_xpath: str,
+        link_xpath: str,
+        time_xpath: Optional[str],
+        next_xpath: str,
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """使用持久化浏览器会话抓取列表，支持点击翻页"""
+        max_pages = params.get("max_pages", 1)
+        engine = params.get("engine") or settings.browser_engine
+        
+        # 目前仅在 Playwright 下实现点击翻页会话模式，DrissionPage 暂维持原样
+        if engine == "drissionpage":
+            return await self._scrape_list_legacy(
+                url, list_xpath, title_xpath, link_xpath, time_xpath, next_xpath, params
+            )
+
+        # Windows 兼容性处理：如果不是 Proactor 循环，切换到独立线程
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if sys.platform == 'win32' and loop and type(loop).__name__ != 'ProactorEventLoop':
+            return await asyncio.to_thread(
+                self._sync_scrape_list_session, 
+                url, list_xpath, title_xpath, link_xpath, time_xpath, next_xpath, params
+            )
+            
+        return await self._scrape_list_session_internal(
+            url, list_xpath, title_xpath, link_xpath, time_xpath, next_xpath, params
+        )
+
+    def _sync_scrape_list_session(self, *args) -> Dict[str, Any]:
+        """同步包装器，用于在独立线程中运行异步会话抓取"""
+        return asyncio.run(self._scrape_list_session_internal(*args))
+
+    async def _scrape_list_session_internal(
+        self,
+        url: str,
+        list_xpath: str,
+        title_xpath: str,
+        link_xpath: str,
+        time_xpath: Optional[str],
+        next_xpath: str,
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Playwright 内部实现：支持点击翻页的会话抓取"""
+        max_pages = params.get("max_pages", 1)
+        all_items = []
+        last_html = ""
+        
+        page = None
+        context = None
+        
+        try:
+            browser = await browser_manager.get_browser()
+            user_agent = params.get("user_agent") or settings.user_agent
+            context = await browser.new_context(user_agent=user_agent)
+            page = await context.new_page()
+            
+            # 设置反检测
+            if params.get("stealth", settings.stealth_mode):
+                await Stealth().apply_stealth_async(page)
+                
+            timeout = params.get("timeout", settings.default_timeout)
+            wait_for = params.get("wait_for", settings.default_wait_for)
+            wait_time = params.get("wait_time", 3000)
+
+            # 初始导航
+            logger.info(f"Session scraping started: {url}")
+            await page.goto(url, wait_until=wait_for, timeout=timeout)
+            if wait_time > 0:
+                await page.wait_for_timeout(wait_time)
+
+            for page_num in range(1, max_pages + 1):
+                logger.info(f"Scraping page {page_num} in session...")
+                
+                # 获取当前页面 HTML
+                html_content = await page.content()
+                last_html = html_content
+                tree = lxml_html.fromstring(html_content)
+                
+                # 提取列表项
+                containers = tree.xpath(list_xpath)
+                page_items = []
+                for container in containers:
+                    item = {}
+                    def extract_one(xpath_str, default=""):
+                        if not xpath_str: return default
+                        try:
+                            res = container.xpath(xpath_str)
+                            if not res: return default
+                            if isinstance(res, list):
+                                texts = [r.strip() if isinstance(r, str) else r.text_content().strip() for r in res]
+                                return " ".join(filter(None, texts))
+                            return res.strip() if isinstance(res, str) else res.text_content().strip()
+                        except: return default
+
+                    item['title'] = extract_one(title_xpath)
+                    link = extract_one(link_xpath)
+                    item['link'] = urljoin(page.url, link) if link else ""
+                    if time_xpath: item['time'] = extract_one(time_xpath)
+                    
+                    if item.get('title') or item.get('link'):
+                        page_items.append(item)
+                
+                all_items.extend(page_items)
+                logger.info(f"Page {page_num} extracted {len(page_items)} items")
+
+                # 如果不是最后一页，尝试翻页
+                if page_num < max_pages:
+                    # 点击模式：直接在页面中查找并点击该 XPath 对应的元素
+                    logger.info(f"Attempting to click next page button: {next_xpath}")
+                    try:
+                        # 将 XPath 转换为 Playwright 选择器格式
+                        next_button = page.locator(f"xpath={next_xpath}").first
+                        
+                        # 确保按钮在视图中并可见
+                        if await next_button.count() > 0:
+                            # 滚动到按钮位置，防止被遮挡或不在视口内
+                            await next_button.scroll_into_view_if_needed()
+                            
+                            # 点击翻页
+                            await next_button.click()
+                            
+                            # 点击后等待内容加载
+                            # 优先等待网络空闲，然后再等待指定的 wait_time
+                            try:
+                                await page.wait_for_load_state("networkidle", timeout=5000)
+                            except:
+                                pass
+                                
+                            if wait_time > 0:
+                                await page.wait_for_timeout(wait_time)
+                                
+                            logger.info(f"Clicked next page button, waiting for content...")
+                        else:
+                            logger.warning(f"Next button not found with XPath: {next_xpath}")
+                            break
+                    except Exception as e:
+                        logger.error(f"Click pagination failed: {e}")
+                        break
+                else:
+                    break
+
+            return {
+                "status": "success",
+                "html": last_html,
+                "items": all_items,
+                "count": len(all_items)
+            }
+
+        except Exception as e:
+            logger.error(f"Session scrape failed: {e}")
+            return {"status": "failed", "error": str(e)}
+        finally:
+            if context: await context.close()
+
+    async def _scrape_list_legacy(
+        self,
+        url: str,
+        list_xpath: str,
+        title_xpath: str,
+        link_xpath: str,
+        time_xpath: Optional[str] = None,
+        pagination_next_xpath: Optional[str] = None,
         params: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
@@ -45,6 +253,7 @@ class Scraper:
             title_xpath: 标题 XPath (相对于列表项)
             link_xpath: 链接 XPath (相对于列表项)
             time_xpath: 时间 XPath (相对于列表项)
+            pagination_next_xpath: 下一页按钮 XPath
             params: 抓取参数 (engine, timeout, wait_for_selector, max_pages, pagination_next_xpath 等)
             
         Returns:
@@ -52,7 +261,7 @@ class Scraper:
         """
         params = params or {}
         max_pages = params.get("max_pages", 1)
-        next_xpath = params.get("pagination_next_xpath")
+        next_xpath = pagination_next_xpath or params.get("pagination_next_xpath")
         
         all_items = []
         current_url = url
@@ -97,12 +306,29 @@ class Scraper:
 
                 if html_content:
                     # 检查是否抓到了列表项，如果没有抓到，也可能需要重试
-                    tree = lxml_html.fromstring(html_content)
-                    containers = tree.xpath(list_xpath)
-                    if containers:
-                        break # 抓到内容了，跳出重试循环
-                    else:
-                        logger.warning(f"Page {page_num} attempt {retry + 1}: No containers found with XPath {list_xpath}")
+                    try:
+                        # 预先清理和修剪 XPath，防止末尾斜杠等导致 lxml 报错
+                        if not list_xpath or not list_xpath.strip():
+                            logger.error("List XPath is empty or only whitespace")
+                            return {"status": "failed", "error": "List XPath cannot be empty"}
+                            
+                        list_xpath = list_xpath.strip()
+                        if list_xpath.endswith('/') and not list_xpath.endswith('//'):
+                            list_xpath = list_xpath[:-1]
+                        
+                        tree = lxml_html.fromstring(html_content)
+                        containers = tree.xpath(list_xpath)
+                        if containers:
+                            break # 抓到内容了，跳出重试循环
+                        else:
+                            logger.warning(f"Page {page_num} attempt {retry + 1}: No containers found with XPath {list_xpath}")
+                    except lxml_etree.XPathEvalError as e:
+                        logger.error(f"XPathEvalError for '{list_xpath}': {e}")
+                        return {"status": "failed", "error": f"Invalid List XPath: {e}"}
+                    except Exception as e:
+                        logger.error(f"Error parsing HTML or XPath: {e}")
+                        if retry == max_retries:
+                            return {"status": "failed", "error": f"XPath Error: {e}"}
                 
                 if retry < max_retries:
                     await asyncio.sleep(1) # 等待一秒再重试
@@ -118,6 +344,12 @@ class Scraper:
             try:
                 # 重新解析 tree，因为上面可能已经解析过了，或者为了保险起见
                 tree = lxml_html.fromstring(html_content)
+                
+                # 再次清理 XPath
+                list_xpath = list_xpath.strip()
+                if list_xpath.endswith('/') and not list_xpath.endswith('//'):
+                    list_xpath = list_xpath[:-1]
+                
                 containers = tree.xpath(list_xpath)
                 page_items = []
                 
@@ -160,19 +392,33 @@ class Scraper:
                 
                 # 3. 检查是否有下一页
                 if page_num < max_pages and next_xpath:
-                    next_links = tree.xpath(next_xpath)
-                    
-                    # 如果没找到下一页链接，尝试增加等待时间重扫一次当前页（可能分页加载较慢）
-                    if not next_links:
-                        logger.warning(f"Page {page_num}: Next link not found, retrying with longer wait...")
-                        scrape_params = params.copy()
-                        scrape_params["parser"] = None
-                        scrape_params["wait_time"] = scrape_params.get("wait_time", 3000) + 5000
-                        res = await self.scrape(current_url, scrape_params, "internal")
-                        if res.get("status") == "success":
-                            html_content = res.get("html", "")
-                            tree = lxml_html.fromstring(html_content)
+                    try:
+                        # 如果 XPath 不以 /@href 或 /@src 结尾，且不是直接取属性的表达式，自动补全 /@href
+                        # 这样可以兼容用户只写 a 标签 XPath 的情况
+                        check_xpath = next_xpath.strip()
+                        if not any(check_xpath.endswith(suffix) for suffix in ['/@href', '/@src', '/text()']) and '[' not in check_xpath.split('/')[-1]:
+                            # 尝试先用原 XPath 找，如果没找到 href 属性，再尝试补全
                             next_links = tree.xpath(next_xpath)
+                            if next_links and hasattr(next_links[0], 'get') and not next_links[0].get('href'):
+                                # 如果找到了元素但没 href，可能需要补全或者已经在属性里了（下面会处理）
+                                pass
+                        
+                        next_links = tree.xpath(next_xpath)
+                        
+                        # 如果没找到下一页链接，尝试增加等待时间重扫一次当前页（可能分页加载较慢）
+                        if not next_links:
+                            logger.warning(f"Page {page_num}: Next link not found, retrying with longer wait...")
+                            scrape_params = params.copy()
+                            scrape_params["parser"] = None
+                            scrape_params["wait_time"] = scrape_params.get("wait_time", 3000) + 5000
+                            res = await self.scrape(current_url, scrape_params, "internal")
+                            if res.get("status") == "success":
+                                html_content = res.get("html", "")
+                                tree = lxml_html.fromstring(html_content)
+                                next_links = tree.xpath(next_xpath)
+                    except lxml_etree.XPathEvalError as e:
+                        logger.error(f"Invalid Next Page XPath: {e}")
+                        break # Skip pagination if XPath is invalid
                     
                     logger.debug(f"Page {page_num} next_links found: {len(next_links)}")
                     if next_links:
@@ -182,7 +428,13 @@ class Scraper:
                         if isinstance(r, str):
                             next_url = r.strip()
                         elif hasattr(r, 'get'):
+                            # 优先尝试从 a 标签获取 href
                             next_url = r.get('href', '') or r.get('src', '')
+                            # 如果还是没有，且有子元素，尝试从子元素获取
+                            if not next_url and hasattr(r, 'xpath'):
+                                sub_hrefs = r.xpath('.//a/@href')
+                                if sub_hrefs:
+                                    next_url = sub_hrefs[0]
                         elif hasattr(r, 'text_content'):
                             # 如果是一个 a 标签但没拿到 href，尝试从属性中获取或取文本
                             next_url = r.get('href', '') if hasattr(r, 'get') else ''
@@ -191,6 +443,15 @@ class Scraper:
                         
                         logger.info(f"Page {page_num} next_url extracted: {next_url}")
                         if next_url and not next_url.startswith('javascript:'):
+                            # 过滤掉常见的非 URL 文本，比如“下一页”文字本身（如果 XPath 指向了文本节点）
+                            if not (next_url.startswith('http') or '/' in next_url or '.' in next_url):
+                                logger.warning(f"Extracted next_url '{next_url}' seems to be text, not a link. Check your XPath.")
+                                # 如果是纯文本且不是相对路径，尝试看原元素是否有 href
+                                if hasattr(r, 'get'):
+                                    actual_href = r.get('href')
+                                    if actual_href:
+                                        next_url = actual_href
+                            
                             current_url = urljoin(current_url, next_url)
                         else:
                             logger.info(f"Page {page_num}: No valid next page URL found or it is javascript.")
@@ -243,7 +504,38 @@ class Scraper:
         params: Dict[str, Any],
         node_id: str
     ) -> Dict[str, Any]:
-        """使用 Playwright 抓取网页"""
+        """
+        使用 Playwright 抓取网页 (带 Windows 兼容性处理)
+        """
+        # 在 Windows 平台上，Playwright 启动子进程需要 ProactorEventLoop
+        # 如果当前事件循环不是 ProactorEventLoop (例如是 SelectorEventLoop)，则在独立线程中运行
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if sys.platform == 'win32' and loop and type(loop).__name__ != 'ProactorEventLoop':
+            logger.warning(f"当前事件循环为 {type(loop).__name__}，Playwright 在 Windows 上需要 ProactorEventLoop。"
+                           f"正在切换到独立线程执行抓取任务以确保兼容性。")
+            # 使用 asyncio.to_thread 在新线程中运行，新线程将使用 asyncio.run 开启独立的 Proactor 循环
+            return await asyncio.to_thread(self._sync_scrape_with_playwright, url, params, node_id)
+        
+        return await self._scrape_with_playwright_internal(url, params, node_id)
+
+    def _sync_scrape_with_playwright(self, url: str, params: Dict[str, Any], node_id: str) -> Dict[str, Any]:
+        """同步包装器，用于在独立线程中运行异步抓取"""
+        # asyncio.run 会在当前线程创建一个新的事件循环
+        # 由于 app/__init__.py 或 app/main.py 已经设置了 WindowsProactorEventLoopPolicy
+        # 这里的 asyncio.run 会自动创建 ProactorEventLoop
+        return asyncio.run(self._scrape_with_playwright_internal(url, params, node_id))
+
+    async def _scrape_with_playwright_internal(
+        self,
+        url: str,
+        params: Dict[str, Any],
+        node_id: str
+    ) -> Dict[str, Any]:
+        """使用 Playwright 抓取网页的内部核心实现"""
         start_time = time.time()
         page = None
         context = None
@@ -410,14 +702,11 @@ class Scraper:
                         raise # 页面内容太少，还是抛出超时异常
 
             # 等待特定选择器
-            wait_for_selector = params.get("wait_for_selector") or params.get("selector")
-            if wait_for_selector:
+            if params.get("selector"):
                 try:
-                    logger.info(f"Waiting for selector: {wait_for_selector}")
-                    await page.wait_for_selector(wait_for_selector, timeout=timeout)
+                    await page.wait_for_selector(params["selector"], timeout=timeout)
                 except PlaywrightTimeoutError:
                     # 如果已经有内容，选择器超时也可以容忍
-                    logger.warning(f"Timeout waiting for selector: {wait_for_selector}")
                     pass
 
             # 额外等待时间

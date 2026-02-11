@@ -158,10 +158,6 @@ class ParserService:
         if not llm_client:
             return {"error": "LLM API key not configured"}
 
-        # 检查是否是 XPath 助手模式
-        if config and config.get("mode") == "xpath_helper":
-            return await self._get_xpath_with_llm(html)
-
         # 提取需要解析的字段
         fields = config.get("fields", ["title", "content"]) if config else ["title", "content"]
         
@@ -188,7 +184,7 @@ HTML 文本:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
             )
             
             content = response.choices[0].message.content
@@ -197,58 +193,61 @@ HTML 文本:
             logger.error(f"LLM extraction failed: {e}")
             return {"error": f"LLM extraction failed: {str(e)}"}
 
-    async def _get_xpath_with_llm(self, html: str) -> Dict[str, Any]:
-        """使用大模型分析 HTML 结构并返回 XPath 建议"""
+    async def generate_xpath_rules(self, html: str) -> Dict[str, str]:
+        """使用 LLM 生成 XPath 规则"""
         llm_client = self._get_llm_client()
+        if not llm_client:
+            return {"error": "LLM API key not configured"}
+
+        # 简化 HTML: 移除 script, style, svg, path 等非结构化标签，保留 div, span, a, ul, li, table 等结构标签
+        # 同时保留 class 和 id 属性，这对于 XPath 至关重要
+        clean_html = re.sub(r'<(script|style|svg|path|noscript).*?>.*?</\1>', '', html, flags=re.DOTALL)
+        clean_html = re.sub(r'<!--.*?-->', '', clean_html, flags=re.DOTALL)
+        # 移除过长的文本内容，只保留前 50 个字符，减少 Token 消耗
+        clean_html = re.sub(r'>([^<]{50,})<', lambda m: f">{m.group(1)[:20]}...<", clean_html)
         
-        # 简化 HTML，保留结构但移除大量内容以节省 Token
-        # 仅保留具有 class 或 id 的标签，或者 a 标签
-        # 使用 BeautifulSoup 会更优雅，但这里先用正则表达式做简单处理
-        clean_html = re.sub(r'<(script|style|svg|path|meta|link).*?>.*?</\1>', '', html, flags=re.DOTALL)
-        # 移除大部分文本内容，只保留标签结构和关键属性
-        lines = []
-        for line in clean_html.split('\n'):
-            line = line.strip()
-            if not line: continue
-            # 简化标签，只保留 id 和 class 属性
-            line = re.sub(r'<(\w+)\s+[^>]*?(id|class)=["\']([^"\']+)["\'][^>]*>', r'<\1 \2="\3">', line)
-            # 移除没有 id/class 的其他属性
-            line = re.sub(r'<(\w+)\s+[^>]+>', r'<\1>', line)
-            lines.append(line)
-        
-        struct_html = "\n".join(lines)[:15000] # 截断
+        # 进一步截断，保留前 15000 个字符 (根据模型上下文窗口调整)
+        clean_html = " ".join(clean_html.split())[:100000]
 
         prompt = f"""
-你是一个专业的网页解析专家。请分析以下 HTML 结构，并为列表页提取提供最精准的 XPath 规则。
-你需要识别页面中的列表容器，以及列表项内部的标题、链接和时间。
+你是一个专业的爬虫工程师。请分析以下 HTML 片段，识别列表页的结构，并生成对应的 XPath 提取规则。
+HTML 片段:
+{clean_html}
 
-HTML 结构片段:
-{struct_html}
+请识别以下字段的 XPath:
+1. list_xpath: 列表项的容器（例如 //div[@class='list-item']）。
+2. title_xpath: 列表项中的标题（相对于 list_xpath 的相对路径）。
+3. link_xpath: 列表项中的详情页链接（相对于 list_xpath 的相对路径）。
+4. time_xpath: 发布时间（相对于 list_xpath 的相对路径）。
+5. pagination_next_xpath: 下一页按钮的 XPath（绝对路径，指向可点击的翻页按钮，优先使用字符匹配，不限于下一页、下页、>等）。
 
-请返回一个 JSON 对象，包含以下字段：
-1. list_xpath: 能够匹配所有列表项容器的 XPath（通常是重复的 div, li, tr 等）
-2. title_xpath: 相对于列表项容器的标题提取 XPath（通常是 .//a 或 .//h2 等）
-3. link_xpath: 相对于列表项容器的链接提取 XPath（通常是 .//a/@href）
-4. time_xpath: 相对于列表项容器的时间提取 XPath（可选，如果能识别到）
-
-请只返回合法的 JSON 对象。
+请注意：
+- 对于具有多个类名的元素（例如 <div class="pagination mb20">），**严禁**使用 `@class='pagination'` 这种完全匹配语法，必须使用 `contains(@class, 'pagination')` 这种部分匹配语法。
+- 严禁在生成的 XPath 末尾添加多余的斜杠 `/`。
+- list_xpath、title_xpath、link_xpath 是必需的。
+- pagination_next_xpath 必须是能够定位到“下一页”或者翻页按钮。
+- 如果找不到某个字段，value 设为 null。
+- 请以 JSON 格式返回，key 为上述字段名，value 为 XPath 字符串。
+- 请确保生成的 XPath 尽可能通用且健壮，优先使用 id 或具有语义的 class。
+- 只返回 JSON 对象。
 """
         try:
             response = await llm_client.chat.completions.create(
                 model=settings.llm_model,
                 messages=[
-                    {"role": "system", "content": "你是一个网页 XPath 专家，能够精准识别 HTML 结构并生成 XPath。"},
+                    {"role": "system", "content": "你是一个XPath规则生成专家。"},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                timeout=60
             )
             
             content = response.choices[0].message.content
             return json.loads(content)
         except Exception as e:
-            logger.error(f"LLM XPath generation failed: {e}")
-            return {"error": f"LLM XPath generation failed: {str(e)}"}
+            logger.error(f"LLM rule generation failed: {e}")
+            return {"error": f"Rule generation failed: {str(e)}"}
 
 # 全局解析服务实例
 parser_service = ParserService()

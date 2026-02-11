@@ -24,7 +24,6 @@ def init_admin():
     
     existing_user = sqlite_db.get_user_by_username(username)
     if not existing_user:
-        password_hash = get_password_hash(password)
         sqlite_db.create_user(
             username=username,
             password_hash=password_hash,
@@ -32,7 +31,9 @@ def init_admin():
         )
         logger.info(f"成功创建默认管理员账号: {username} / {password}")
     else:
-        logger.info(f"管理员账号 {username} 已存在，跳过初始化。")
+        # 重置密码，确保 hash 版本兼容且密码正确
+        sqlite_db.update_user_password(existing_user['id'], password_hash)
+        logger.info(f"管理员账号 {username} 已存在，已重置密码。")
 
 if __name__ == "__main__":
     init_admin()

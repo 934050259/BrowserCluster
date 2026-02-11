@@ -6,19 +6,18 @@ FastAPI 应用主模块
 import os
 import sys
 import asyncio
+
+# Windows 平台下，Playwright 需要使用 ProactorEventLoopPolicy 才能正常启动子进程
+# 必须在任何 asyncio 相关的库导入之前设置
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 import logging
 import time
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-
-
-
-# Windows 平台下，Playwright 需要使用 ProactorEventLoopPolicy 才能正常启动子进程
-if sys.platform == 'win32':
-    # 尽可能早地设置策略
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 # 将项目根目录添加到 python 路径
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

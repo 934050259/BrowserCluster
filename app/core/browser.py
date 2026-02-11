@@ -58,13 +58,25 @@ class BrowserManager:
             Playwright: Playwright 实例
         """
         if self._playwright is None:
-            # Windows 诊断日志
+            # Windows 诊断与自动修复
             if sys.platform == 'win32':
-                loop = asyncio.get_running_loop()
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    # 如果没有正在运行的循环，尝试获取当前线程的循环
+                    loop = asyncio.get_event_loop()
+                
                 loop_type = type(loop).__name__
                 logger.info(f"Starting Playwright. Current loop type: {loop_type}")
+                
                 if loop_type != 'ProactorEventLoop':
-                    logger.error("CRITICAL: Playwright requires ProactorEventLoop on Windows, but found %s", loop_type)
+                    logger.warning(f"Playwright requires ProactorEventLoop on Windows, but found {loop_type}. Attempting to fix...")
+                    try:
+                        # 强制设置当前线程的事件循环策略
+                        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+                        logger.info("Successfully set WindowsProactorEventLoopPolicy for current thread.")
+                    except Exception as e:
+                        logger.error(f"Failed to set WindowsProactorEventLoopPolicy: {e}")
             
             self._playwright = await async_playwright().start()
         return self._playwright

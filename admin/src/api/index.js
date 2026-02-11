@@ -333,12 +333,12 @@ export const deleteScraper = async (id) => {
 }
 
 export const testScraper = async (data) => {
-  const response = await api.post('/scrapers/test', data)
+  const response = await api.post('/scrapers/test', data, { timeout: 120000 })
   return response.data
 }
 
-export const aiExtractScraper = async (data) => {
-  const response = await api.post('/scrapers/ai-extract', data)
+export const aiGenerateRules = async (data) => {
+  const response = await api.post('/scrapers/ai-generate-rules', data, { timeout: 120000 })
   return response.data
 }
 

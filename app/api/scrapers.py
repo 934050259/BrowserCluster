@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Depends
-from app.models.scraper import ScraperCreate, ScraperUpdate, ScraperResponse, ScraperTestRequest, AIExtractRequest
+from app.models.scraper import ScraperCreate, ScraperUpdate, ScraperResponse, ScraperTestRequest, AiRuleGenerationRequest
 from app.db.mongo import mongo
 from app.core.auth import get_current_user
 from app.core.scraper import Scraper
@@ -87,9 +87,53 @@ async def delete_scraper(scraper_id: str, current_user: dict = Depends(get_curre
         
     return {"status": "success"}
 
+@router.post("/ai-generate-rules", response_model=dict)
+async def ai_generate_rules(request: AiRuleGenerationRequest, current_user: dict = Depends(get_current_user)):
+    """使用 AI 生成 XPath 规则"""
+    try:
+        scraper = Scraper()
+        
+        # 1. 使用 DrissionPage 获取 HTML (解决阻塞问题，Scraper 内部已处理)
+        html = await scraper.validate_rules_with_drission(
+            url=str(request.url),
+            wait_for_selector=request.wait_for_selector,
+            timeout=request.timeout // 1000  # Convert ms to seconds
+        )
+        
+        if not html:
+            raise HTTPException(status_code=400, detail="Failed to fetch HTML content")
+            
+        # 2. 调用 LLM 生成规则
+        rules = await parser_service.generate_xpath_rules(html)
+        
+        if "error" in rules:
+             raise HTTPException(status_code=500, detail=rules["error"])
+             
+        return rules
+        
+    except Exception as e:
+        logger.error(f"AI rule generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/test", response_model=dict)
 async def test_scraper(request: ScraperTestRequest, current_user: dict = Depends(get_current_user)):
     try:
+        # 1. 校验 XPath 语法
+        xpaths_to_check = {
+            "List XPath": request.list_xpath,
+            "Title XPath": request.title_xpath,
+            "Link XPath": request.link_xpath,
+            "Time XPath": request.time_xpath,
+            "Next Page XPath": request.pagination_next_xpath,
+        }
+        
+        for name, xpath in xpaths_to_check.items():
+            if xpath:
+                # 仅记录警告，不再抛出 HTTPException 阻塞执行
+                error = Scraper.validate_xpath(xpath)
+                if error:
+                    logger.warning(f"XPath validation warning for {name}: {error}")
+
         scraper = Scraper()
         
         # 使用统一的 scrape_list 方法
@@ -99,6 +143,7 @@ async def test_scraper(request: ScraperTestRequest, current_user: dict = Depends
             title_xpath=request.title_xpath,
             link_xpath=request.link_xpath,
             time_xpath=request.time_xpath,
+            pagination_next_xpath=request.pagination_next_xpath,
             params={
                 "engine": request.engine,
                 "wait_for": request.wait_for,
@@ -111,7 +156,8 @@ async def test_scraper(request: ScraperTestRequest, current_user: dict = Depends
                 "max_retries": request.max_retries,
                 "proxy": request.proxy,
                 "proxy_pool_group": request.proxy_pool_group,
-                "cookies": request.cookies
+                "cookies": request.cookies,
+                "pagination_next_xpath": request.pagination_next_xpath
             }
         )
         
@@ -126,57 +172,6 @@ async def test_scraper(request: ScraperTestRequest, current_user: dict = Depends
         }
     except Exception as e:
         logger.error(f"Scraper test failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post("/ai-extract", response_model=dict)
-async def ai_extract_xpath(request: AIExtractRequest, current_user: dict = Depends(get_current_user)):
-    """调用 AI 智能解析获取 XPath 规则"""
-    try:
-        scraper = Scraper()
-        
-        # 1. 先抓取页面 HTML
-        res = await scraper.scrape(
-            url=str(request.url),
-            params={
-                "engine": request.engine,
-                "wait_for": request.wait_for,
-                "wait_time": request.wait_time,
-                "wait_for_selector": request.wait_for_selector,
-                "wait_timeout": request.wait_timeout,
-                "block_images": request.block_images,
-                "no_css": request.no_css,
-                "stealth": request.stealth,
-                "proxy": request.proxy,
-                "proxy_pool_group": request.proxy_pool_group,
-                "cookies": request.cookies,
-                "user_agent": request.user_agent
-            },
-            node_id="internal"
-        )
-        
-        if res.get("status") != "success":
-            raise Exception(f"页面抓取失败: {res.get('error')}")
-            
-        html = res.get("html")
-        if not html:
-            raise Exception("未获取到页面 HTML")
-            
-        # 2. 调用 ParserService 的 AI 功能
-        ai_result = await parser_service.parse(
-            html=html,
-            parser_type="llm",
-            config={"mode": "xpath_helper"}
-        )
-        
-        if "error" in ai_result:
-            raise Exception(ai_result["error"])
-            
-        return {
-            "status": "success",
-            "data": ai_result
-        }
-    except Exception as e:
-        logger.error(f"AI extraction failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{scraper_id}/run")

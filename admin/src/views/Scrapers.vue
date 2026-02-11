@@ -5,9 +5,6 @@
         <h2>站点采集</h2>
         <p class="subtitle">管理列表页采集任务及自动发现规则</p>
       </div>
-      <el-button type="primary" @click="handleAdd">
-        <el-icon><Plus /></el-icon>添加采集
-      </el-button>
     </div>
 
     <el-card shadow="never" class="table-card">
@@ -27,6 +24,10 @@
           </el-input>
           <el-button type="danger" :disabled="!selectedRows.length" @click="handleBatchDelete">
             <el-icon><Delete /></el-icon>批量删除
+          </el-button>
+          <el-button type="primary" @click="handleAdd">
+            <el-icon><Plus /></el-icon>
+            <span>添加采集任务</span>
           </el-button>
         </div>
         <div class="toolbar-right">
@@ -80,7 +81,7 @@
                 :loading="runningScrapers.has(row._id)"
                 icon="VideoPlay"
               >
-                执行
+                {{ runningScrapers.has(row._id) ? '正在执行' : '执行' }}
               </el-button>
               <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
               <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
@@ -284,6 +285,15 @@
               <div class="section-group">
                 <div class="section-header">
                   <div class="section-title">列表项定位</div>
+                  <el-button 
+                    type="primary" 
+                    size="small"
+                    @click="handleAiGenerate" 
+                    :loading="aiGenerating" 
+                    :icon="MagicStick"
+                  >
+                    AI 智能生成规则
+                  </el-button>
                 </div>
                 
                 <el-form-item label="列表容器" prop="list_xpath">
@@ -331,8 +341,7 @@
                 </el-form-item>
                 
                 <div class="rules-footer mt-4">
-                  <el-button type="warning" @click="handleTest" :loading="testing" icon="VideoPlay">规则校验</el-button>
-                  <el-button type="primary" @click="handleAIExtract" :loading="aiExtracting" icon="Cpu">AI智能解析</el-button>
+                  <el-button type="warning" @click="handleTest(false)" :loading="testing" icon="VideoPlay">规则校验</el-button>
                   <span class="input-tip">建议在保存前校验 XPath 规则，确保能正确提取数据</span>
                 </div>
               </div>
@@ -673,6 +682,9 @@
               <h3>XPath 提取调试</h3>
               <el-tag size="small" type="success">{{ testResults.items?.length || 0 }} 项匹配</el-tag>
             </div>
+            <div class="input-tip mb-3" style="color: #64748b; line-height: 1.4;">
+              修改下方的 XPath 表达式，右侧视图将实时同步高亮显示匹配结果。
+            </div>
             <div class="url-display" v-if="form.url">
               <el-link :href="form.url" target="_blank" type="info" class="url-text">
                 <el-icon><Link /></el-icon> {{ form.url }}
@@ -691,10 +703,10 @@
                 </template>
                 <div class="xpath-expr-wrapper">
                   <el-input 
-                    v-model="form.list_xpath" 
+                    v-model="testForm.list_xpath" 
                     size="small" 
                     placeholder="容器 XPath"
-                    @input="updateHighlight"
+                    @input="debouncedUpdateHighlight"
                   >
                     <template #append>
                       <el-button @click="locateElement('list')">
@@ -715,10 +727,10 @@
                 </template>
                 <div class="xpath-expr-wrapper">
                   <el-input 
-                    v-model="form.title_xpath" 
+                    v-model="testForm.title_xpath" 
                     size="small" 
                     placeholder="标题 XPath"
-                    @input="updateHighlight"
+                    @input="debouncedUpdateHighlight"
                   >
                     <template #append>
                       <el-button @click="locateElement('title')">
@@ -745,10 +757,10 @@
                 </template>
                 <div class="xpath-expr-wrapper">
                   <el-input 
-                    v-model="form.link_xpath" 
+                    v-model="testForm.link_xpath" 
                     size="small" 
                     placeholder="链接 XPath"
-                    @input="updateHighlight"
+                    @input="debouncedUpdateHighlight"
                   >
                     <template #append>
                       <el-button @click="locateElement('link')">
@@ -765,7 +777,7 @@
                 </div>
               </el-collapse-item>
 
-              <el-collapse-item v-if="form.time_xpath" name="time">
+              <el-collapse-item v-if="testForm.time_xpath || isAiPreview" name="time">
                 <template #title>
                   <div class="collapse-title">
                     <span class="color-dot bg-purple"></span>
@@ -774,10 +786,10 @@
                 </template>
                 <div class="xpath-expr-wrapper">
                   <el-input 
-                    v-model="form.time_xpath" 
+                    v-model="testForm.time_xpath" 
                     size="small" 
                     placeholder="时间 XPath"
-                    @input="updateHighlight"
+                    @input="debouncedUpdateHighlight"
                   >
                     <template #append>
                       <el-button @click="locateElement('time')">
@@ -793,13 +805,57 @@
                   </div>
                 </div>
               </el-collapse-item>
+
+              <el-collapse-item v-if="testForm.pagination_next_xpath || isAiPreview" name="pagination">
+                <template #title>
+                  <div class="collapse-title">
+                    <span class="color-dot bg-red"></span>
+                    <span>下一页 (Next Page)</span>
+                  </div>
+                </template>
+                <div class="xpath-expr-wrapper">
+                  <el-input 
+                    v-model="testForm.pagination_next_xpath" 
+                    size="small" 
+                    placeholder="下一页 XPath"
+                    @input="debouncedUpdateHighlight"
+                  >
+                    <template #append>
+                      <el-button @click="locateElement('pagination')">
+                        <el-icon><Position /></el-icon>
+                      </el-button>
+                    </template>
+                  </el-input>
+                </div>
+                <div class="input-tip mt-2">点击定位按钮查看翻页按钮是否能被正确选中</div>
+              </el-collapse-item>
             </el-collapse>
           </div>
 
           <div class="sidebar-footer">
-            <el-button type="primary" class="w-full" @click="submitForm" :loading="submitting">
-              保存并更新
-            </el-button>
+            <template v-if="isAiPreview">
+              <div class="flex-buttons">
+                <el-button type="success" class="flex-1" @click="confirmAiRules">
+                  确认应用
+                </el-button>
+                <el-button type="warning" class="flex-1" @click="handleTest(true)" :loading="testing" icon="Refresh">
+                  重新生成
+                </el-button>
+              </div>
+              <el-button type="info" class="w-full mt-2" @click="isAiPreview = false; testResultVisible = false" plain>
+                取消
+              </el-button>
+            </template>
+            <template v-else>
+              <div class="flex-buttons">
+                <el-button type="primary" class="flex-1" @click="submitForm" :loading="submitting">
+                  保存并关闭
+                </el-button>
+              </div>
+              <div class="input-tip mt-3 text-center" style="color: #64748b;">
+                <el-icon><InfoFilled /></el-icon> 修改 XPath 后右侧将自动同步预览
+              </div>
+            </template>
           </div>
         </div>
 
@@ -834,7 +890,7 @@
                ref="previewIframe"
                :srcdoc="injectedHtml" 
                class="render-viewer"
-               sandbox="allow-scripts"
+               sandbox="allow-scripts allow-same-origin"
                @load="onIframeLoad"
              ></iframe>
            </div>
@@ -848,14 +904,19 @@
 import { ref, onMounted, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, Cpu } from '@element-plus/icons-vue'
-import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiExtractScraper } from '@/api'
+import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick } from '@element-plus/icons-vue'
+import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules } from '@/api'
 
 const scrapers = ref([])
 const rules = ref([])
 const router = useRouter()
 const loading = ref(false)
-const runningScrapers = ref(new Set())
+const runningScrapers = ref(new Set(JSON.parse(localStorage.getItem('runningScrapers') || '[]')))
+
+const saveRunningStatus = () => {
+    localStorage.setItem('runningScrapers', JSON.stringify(Array.from(runningScrapers.value)))
+}
+
 const activeTab = ref('basic')
 const proxyGroups = ref([])
 
@@ -950,14 +1011,24 @@ const handleBatchDelete = () => {
 
 // 处理执行
 const handleRun = async (row) => {
+    if (runningScrapers.value.has(row._id)) return
+    
     try {
         runningScrapers.value.add(row._id)
+        saveRunningStatus()
+        
         await runScraper(row._id)
         ElMessage.success(`任务 "${row.name}" 已提交执行`)
+        
+        // 提交成功后保持 5 秒的“正在执行”状态，给用户明确反馈
+        setTimeout(() => {
+            runningScrapers.value.delete(row._id)
+            saveRunningStatus()
+        }, 5000)
     } catch (error) {
-        ElMessage.error(error.response?.data?.detail || '执行失败')
-    } finally {
         runningScrapers.value.delete(row._id)
+        saveRunningStatus()
+        ElMessage.error(error.response?.data?.detail || '执行失败')
     }
 }
 
@@ -1015,11 +1086,12 @@ const isEdit = ref(false)
 const submitting = ref(false)
 const isNavigating = ref(false)
 const testing = ref(false)
-const aiExtracting = ref(false)
+const aiGenerating = ref(false)
 const formRef = ref(null)
 const previewIframe = ref(null)
 
 const testResultVisible = ref(false)
+const isAiPreview = ref(false)
 const htmlViewMode = ref('render') // Default to render view
 const showHighlight = ref(true)
 const activeXPathField = ref(['list', 'title'])
@@ -1027,229 +1099,343 @@ const testResults = reactive({
     html: '',
     items: []
 })
+const testForm = reactive({
+    list_xpath: '',
+    title_xpath: '',
+    link_xpath: '',
+    time_xpath: '',
+    pagination_next_xpath: ''
+})
+
+// 颜色配置
+const COLORS = {
+    list: { border: '#409eff', bg: 'rgba(64, 158, 255, 0.15)' },
+    title: { border: '#67c23a', bg: 'rgba(103, 194, 58, 0.15)' },
+    link: { border: '#e6a23c', bg: 'rgba(230, 162, 60, 0.15)' },
+    time: { border: '#9c27b0', bg: 'rgba(156, 39, 176, 0.15)' },
+    pagination: { border: '#f56c6c', bg: 'rgba(245, 108, 108, 0.15)' }
+};
+
+// 当前正在定位的目标
+const locatingTarget = ref(null);
 
 // 计算注入了高亮脚本的 HTML
 const injectedHtml = computed(() => {
-    if (!testResults.html) return ''
-    
-    const highlightScript = `
-        <script>
-            const COLORS = {
-                list: { border: '#409eff', bg: 'rgba(64, 158, 255, 0.15)' },
-                title: { border: '#67c23a', bg: 'rgba(103, 194, 58, 0.15)' },
-                link: { border: '#e6a23c', bg: 'rgba(230, 162, 60, 0.15)' },
-                time: { border: '#9c27b0', bg: 'rgba(156, 39, 176, 0.15)' }
-            };
+    if (!testResults.html) return '';
 
-            function highlightElements(configs) {
-                // 移除所有旧高亮，除了正在定位的
-                document.querySelectorAll('.xpath-highlight:not(.locating)').forEach(el => {
-                    el.classList.remove('xpath-highlight');
-                    el.style.outline = '';
-                    el.style.backgroundColor = '';
-                    el.style.boxShadow = '';
-                });
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(testResults.html, 'text/html');
 
-                if (!configs || configs.length === 0) return;
+        // 1. 清理干扰项
+        // 移除 xmlns 防止 XPath 命名空间问题
+        if (doc.documentElement.hasAttribute('xmlns')) {
+            doc.documentElement.removeAttribute('xmlns');
+        }
+        // 移除脚本防止执行
+        doc.querySelectorAll('script').forEach(el => el.remove());
+        doc.querySelectorAll('meta[http-equiv="refresh"]').forEach(el => el.remove());
 
-                configs.forEach(config => {
-                    if (!config.xpath) return;
-                    const color = COLORS[config.type] || COLORS.list;
-                    
-                    try {
-                        const result = document.evaluate(config.xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                        for (let i = 0; i < result.snapshotLength; i++) {
-                            const node = result.snapshotItem(i);
-                            if (node.nodeType === 1) { // Element node
-                                node.classList.add('xpath-highlight');
-                                node.style.outline = '1px dashed ' + color.border;
-                                node.style.outlineOffset = '-1px';
-                                node.style.backgroundColor = color.bg;
-                            }
-                        }
-                    } catch (e) {
-                        console.error('XPath evaluation error for ' + config.type + ':', e);
-                    }
-                });
-            }
+        // 2. 准备配置项
+        const configs = [];
+        if (showHighlight.value) {
+             if (testForm.list_xpath) configs.push({ type: 'list', xpath: testForm.list_xpath });
+             if (testForm.title_xpath) configs.push({ type: 'title', xpath: testForm.title_xpath });
+             if (testForm.link_xpath) configs.push({ type: 'link', xpath: testForm.link_xpath });
+             if (testForm.time_xpath) configs.push({ type: 'time', xpath: testForm.time_xpath });
+             if (testForm.pagination_next_xpath) configs.push({ type: 'pagination', xpath: testForm.pagination_next_xpath });
+        }
 
-            function locateElement(xpath, type, listXpath) {
-                console.log('Locating element:', type, xpath, 'with listXpath:', listXpath);
-                try {
-                    let targets = [];
-                    
-                    if (type === 'list' || !listXpath) {
-                        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                        for (let i = 0; i < result.snapshotLength; i++) {
-                            const node = result.snapshotItem(i);
-                            const target = node.nodeType === 1 ? node : node.parentElement;
-                            if (target) targets.push(target);
-                        }
-                    } else {
-                        const containers = document.evaluate(listXpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                        for (let i = 0; i < containers.snapshotLength; i++) {
-                            const container = containers.snapshotItem(i);
-                            try {
-                                const result = document.evaluate(xpath, container, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                                for (let j = 0; j < result.snapshotLength; j++) {
-                                    const node = result.snapshotItem(j);
-                                    const target = node.nodeType === 1 ? node : (node.parentElement || node.ownerElement);
-                                    if (target) targets.push(target);
-                                }
-                            } catch (e) {
-                                console.warn('Child XPath evaluation failed for container', i, e);
-                            }
-                        }
-                    }
+        // 3. 执行 XPath 匹配并应用样式 (在 DOMParser 的文档对象上直接操作)
+        applyHighlightsToDoc(doc, configs, testForm.list_xpath);
 
-                    if (targets.length > 0) {
-                        targets[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        
-                        const color = COLORS[type] || COLORS.list;
-                        targets.forEach(target => {
-                            // 清除旧的定位状态
-                            target.classList.add('locating');
-                            
-                            // 持久化高亮样式
-                            target.style.outline = '3px solid ' + color.border;
-                            target.style.outlineOffset = '2px';
-                            target.style.boxShadow = '0 0 15px ' + color.border;
-                            target.style.zIndex = '9999';
-                            target.style.transition = 'all 0.3s ease';
+        // 4. 序列化回 HTML
+        let safeHtml = new XMLSerializer().serializeToString(doc);
 
-                            // 柔和的背景闪烁动画
-                            target.animate([
-                                { backgroundColor: color.bg },
-                                { backgroundColor: color.bg.replace('0.15', '0.4') },
-                                { backgroundColor: color.bg }
-                            ], {
-                                duration: 1500,
-                                iterations: 2,
-                                easing: 'ease-in-out'
-                            });
-
-                            // 3秒后移除定位特有的强高亮，恢复普通高亮
-                            setTimeout(() => {
-                                target.classList.remove('locating');
-                                target.style.outline = '1px dashed ' + color.border;
-                                target.style.outlineOffset = '-1px';
-                                target.style.boxShadow = '';
-                                target.style.zIndex = '';
-                            }, 3000);
-                        });
-                    }
-                } catch (e) {
-                    console.error('XPath locate error:', e);
+        // 5. 注入辅助 CSS
+        const helperScript = `
+            <style>
+                .xpath-highlight {
+                    position: relative !important;
+                    z-index: 1;
+                    cursor: help;
+                    transition: all 0.3s ease;
                 }
-            }
-
-            window.addEventListener('message', (event) => {
-                if (event.data.type === 'highlight') {
-                    highlightElements(event.data.configs);
-                } else if (event.data.type === 'locate') {
-                    locateElement(event.data.xpath, event.data.fieldType, event.data.listXpath);
+                .xpath-highlight:hover {
+                    z-index: 100;
+                    box-shadow: 0 0 8px rgba(0,0,0,0.5) !important;
                 }
-            });
-        <\/script>
-        <style>
-            .xpath-highlight {
-                transition: all 0.2s ease;
-                position: relative !important;
-                z-index: 1;
-            }
-            .xpath-highlight:hover {
-                filter: brightness(0.9);
-                z-index: 10;
-            }
-        </style>
-    `
-    // 注入到 </body> 前
-    if (testResults.html.includes('</body>')) {
-        return testResults.html.replace('</body>', highlightScript + '</body>')
+                .xpath-locating {
+                    outline-width: 4px !important;
+                    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2) !important;
+                    z-index: 1000 !important;
+                    animation: pulse 1s infinite;
+                }
+                @keyframes pulse {
+                    0% { transform: scale(1); }
+                    50% { transform: scale(1.02); }
+                    100% { transform: scale(1); }
+                }
+            </style>
+        `;
+
+        if (safeHtml.includes('</body>')) {
+            return safeHtml.replace('</body>', helperScript + '</body>');
+        } else {
+            return safeHtml + helperScript;
+        }
+
+    } catch (e) {
+        console.error('HTML processing error:', e);
+        return testResults.html;
     }
-    return testResults.html + highlightScript
 })
 
-const onIframeLoad = () => {
-    if (showHighlight.value) {
-        updateHighlight()
+// 在 DOMParser 创建的文档上执行高亮
+function applyHighlightsToDoc(doc, configs, listXpath) {
+    // 预先查找列表容器
+    let containers = [];
+    if (listXpath) {
+        try {
+            const result = doc.evaluate(listXpath, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            for(let i=0; i<result.snapshotLength; i++) containers.push(result.snapshotItem(i));
+        } catch(e) {}
     }
+
+    configs.forEach(config => {
+        if (!config.xpath) return;
+        const color = COLORS[config.type] || COLORS.list;
+        
+        // 判断是否使用相对定位
+        const isRelativeField = ['title', 'link', 'time'].includes(config.type);
+        const isRelativePath = config.xpath.trim().startsWith('.');
+        
+        let nodesToHighlight = [];
+
+        if (isRelativeField && containers.length > 0 && isRelativePath) {
+             // 相对定位
+             containers.forEach(container => {
+                 try {
+                     const result = doc.evaluate(config.xpath, container, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                     for (let i = 0; i < result.snapshotLength; i++) {
+                         nodesToHighlight.push(result.snapshotItem(i));
+                     }
+                 } catch(e) {}
+             });
+        } else {
+            // 全局定位
+             try {
+                const result = doc.evaluate(config.xpath, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                for (let i = 0; i < result.snapshotLength; i++) {
+                     nodesToHighlight.push(result.snapshotItem(i));
+                }
+            } catch (e) {}
+        }
+
+        // 应用样式
+        nodesToHighlight.forEach(node => {
+            let el = node;
+            if (node.nodeType === 2) el = node.ownerElement; // Attribute -> Element
+            else if (node.nodeType === 3) el = node.parentElement; // Text -> Element
+            
+            if (el && el.style) {
+                let style = `outline: 1px dashed ${color.border}; background-color: ${color.bg};`;
+                el.classList.add('xpath-highlight');
+                const prevTypes = (el.getAttribute('data-xpath-types') || '').trim();
+                const typeSet = new Set(prevTypes ? prevTypes.split(/\s+/) : []);
+                typeSet.add(config.type);
+                el.setAttribute('data-xpath-types', Array.from(typeSet).join(' '));
+                el.setAttribute('style', (el.getAttribute('style') || '') + '; ' + style);
+            }
+        });
+    });
+}
+
+const onIframeLoad = () => {
+    // Iframe 加载完成，无需做额外操作
 }
 
 const updateHighlight = () => {
-    if (previewIframe.value && previewIframe.value.contentWindow) {
-        const configs = []
-        if (showHighlight.value) {
-            if (form.list_xpath) configs.push({ type: 'list', xpath: form.list_xpath })
-            if (form.title_xpath) configs.push({ type: 'title', xpath: form.title_xpath })
-            if (form.link_xpath) configs.push({ type: 'link', xpath: form.link_xpath })
-            if (form.time_xpath) configs.push({ type: 'time', xpath: form.time_xpath })
-        }
+    // 触发 injectedHtml 重新计算即可 (通过修改依赖)
+}
+
+// 提取数据的方法（纯前端实现）
+const extractDataFromHtml = (html) => {
+    if (!html) return [];
+    
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
         
-        previewIframe.value.contentWindow.postMessage({
-            type: 'highlight',
-            configs: configs
-        }, '*')
+        // 移除 xmlns
+        if (doc.documentElement.hasAttribute('xmlns')) {
+            doc.documentElement.removeAttribute('xmlns');
+        }
+
+        const items = [];
+        const listXpath = testForm.list_xpath;
+        
+        if (!listXpath) return [];
+
+        // 查找容器
+        const containers = [];
+        try {
+            const result = doc.evaluate(listXpath, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            for(let i=0; i<result.snapshotLength; i++) containers.push(result.snapshotItem(i));
+        } catch(e) {
+            console.warn('List XPath evaluation failed:', e);
+            return [];
+        }
+
+        // 遍历容器提取字段
+        containers.forEach(container => {
+            const item = {};
+            
+            // 辅助函数：提取单个字段
+            const extractField = (xpath, type) => {
+                if (!xpath) return null;
+                try {
+                    // 判断是否是相对路径
+                    const isRelative = xpath.trim().startsWith('.');
+                    const contextNode = isRelative ? container : doc;
+                    
+                    const result = doc.evaluate(xpath, contextNode, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                    if (result.snapshotLength > 0) {
+                        const node = result.snapshotItem(0);
+                        // 获取文本内容或属性值
+                        if (node.nodeType === 2) return node.value; // Attribute
+                        if (node.nodeType === 3) return node.nodeValue; // Text
+                        if (node.nodeType === 1) return node.textContent.trim(); // Element
+                    }
+                } catch(e) {}
+                return null;
+            };
+
+            item.title = extractField(testForm.title_xpath, 'title');
+            item.link = extractField(testForm.link_xpath, 'link');
+            item.time = extractField(testForm.time_xpath, 'time');
+            
+            // 只有当至少提取到一个有效字段时才添加
+            if (item.title || item.link || item.time) {
+                items.push(item);
+            }
+        });
+
+        return items;
+    } catch (e) {
+        console.error('Data extraction error:', e);
+        return [];
     }
+}
+
+// 防抖处理 updateHighlight
+let highlightTimer = null
+const debouncedUpdateHighlight = () => {
+   // 输入框 v-model 直接更新了 testForm，testForm 更新触发 injectedHtml 更新
+   if (highlightTimer) clearTimeout(highlightTimer)
+   highlightTimer = setTimeout(() => {
+        // 重新提取数据用于左侧列表展示
+        if (testResults.html) {
+            const extractedItems = extractDataFromHtml(testResults.html);
+            testResults.items = extractedItems;
+        }
+   }, 300)
 }
 
 const locateElement = (type) => {
-    let xpath = ''
-    switch(type) {
-        case 'list': xpath = form.list_xpath; break
-        case 'title': xpath = form.title_xpath; break
-        case 'link': xpath = form.link_xpath; break
-        case 'time': xpath = form.time_xpath; break
+    const iframe = previewIframe.value;
+    if (!iframe || !iframe.contentDocument) {
+        ElMessage.warning('预览窗口未就绪');
+        return;
     }
     
-    if (!xpath) {
-        ElMessage.warning('请先输入 XPath')
-        return
-    }
+    const doc = iframe.contentDocument;
+    
+    doc.querySelectorAll('.xpath-locating').forEach(el => {
+        el.classList.remove('xpath-locating');
+    });
+    
+    let elementTargets = Array.from(doc.querySelectorAll(`[data-xpath-types~="${type}"]`));
 
-    // 如果当前在源码视图，先切换到渲染视图
-    if (htmlViewMode.value !== 'render') {
-        htmlViewMode.value = 'render'
-        
-        // 监听 iframe 重新挂载
-        const unwatch = watch(previewIframe, (newIframe) => {
-            if (newIframe) {
-                // 等待 iframe 加载完成
-                const onIframeReady = () => {
-                    sendLocateMessage(xpath, type)
-                    newIframe.removeEventListener('load', onIframeReady)
-                    unwatch()
-                }
-                newIframe.addEventListener('load', onIframeReady)
-            }
-        }, { immediate: true })
+    if (elementTargets.length === 0) {
+        let xpath = '';
+        if (type === 'list') xpath = testForm.list_xpath;
+        else if (type === 'title') xpath = testForm.title_xpath;
+        else if (type === 'link') xpath = testForm.link_xpath;
+        else if (type === 'time') xpath = testForm.time_xpath;
+        else if (type === 'pagination') xpath = testForm.pagination_next_xpath;
 
-        // 防御性超时，防止 watch 没触发
-        setTimeout(() => {
-            if (previewIframe.value) {
-                sendLocateMessage(xpath, type)
-                unwatch()
-            }
-        }, 1000)
-    } else {
-        if (!previewIframe.value || !previewIframe.value.contentWindow) {
-            ElMessage.error('渲染引擎未就绪')
-            return
+        xpath = String(xpath || '').trim();
+        if (!xpath) {
+            ElMessage.warning('请先输入 XPath');
+            return;
         }
-        sendLocateMessage(xpath, type)
+
+        const listXpath = String(testForm.list_xpath || '').trim();
+        const isRelativeField = type === 'title' || type === 'link' || type === 'time';
+        const isRelativePath = xpath.startsWith('.');
+
+        const nodes = [];
+        if (isRelativeField && isRelativePath && listXpath) {
+            try {
+                const containers = doc.evaluate(listXpath, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                for (let i = 0; i < containers.snapshotLength; i++) {
+                    const container = containers.snapshotItem(i);
+                    try {
+                        const r = doc.evaluate(xpath, container, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                        for (let j = 0; j < r.snapshotLength; j++) nodes.push(r.snapshotItem(j));
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        } else {
+            try {
+                const r = doc.evaluate(xpath, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                for (let i = 0; i < r.snapshotLength; i++) nodes.push(r.snapshotItem(i));
+            } catch (e) {}
+        }
+
+        const els = [];
+        const seen = new Set();
+        for (const node of nodes) {
+            let el = node;
+            if (node && node.nodeType === 2) el = node.ownerElement;
+            else if (node && node.nodeType === 3) el = node.parentElement;
+            if (el && el.nodeType === 1) {
+                const key = el;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    els.push(el);
+                }
+            }
+        }
+
+        elementTargets = els;
+    }
+
+    if (elementTargets.length > 0) {
+        elementTargets.forEach(el => {
+            el.classList.add('xpath-locating');
+        });
+        
+        const firstTarget = elementTargets[0];
+        
+        const style = window.getComputedStyle ? window.getComputedStyle(firstTarget) : firstTarget.currentStyle;
+        if (style.display === 'none') {
+             ElMessage.warning('目标元素存在，但是被隐藏了(display: none)，无法滚动可见');
+        }
+        
+        firstTarget.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        
+        ElMessage.success(`已定位到 ${elementTargets.length} 个元素`);
+        
+        setTimeout(() => {
+            elementTargets.forEach(el => el.classList.remove('xpath-locating'));
+        }, 3000);
+    } else {
+        ElMessage.warning('当前视图中未找到对应元素');
     }
 }
 
-const sendLocateMessage = (xpath, type) => {
-    if (previewIframe.value && previewIframe.value.contentWindow) {
-        previewIframe.value.contentWindow.postMessage({
-            type: 'locate',
-            xpath: xpath,
-            fieldType: type,
-            listXpath: form.list_xpath // 传递容器 XPath 用于相对定位
-        }, '*')
-    }
-}
 
 watch(showHighlight, () => {
     updateHighlight()
@@ -1504,88 +1690,107 @@ const submitForm = async () => {
     })
 }
 
-const handleAIExtract = async () => {
+const handleAiGenerate = async () => {
     if (!form.url) {
         ElMessage.warning('请先填写起始 URL')
         return
     }
 
-    aiExtracting.value = true
+    aiGenerating.value = true
     try {
-        const res = await aiExtractScraper({
+        const res = await aiGenerateRules({
             url: form.url,
-            // 同步浏览器配置到 AI 接口以确保能正确抓取页面
-            engine: form.params.engine,
-            wait_for: form.params.wait_for,
-            wait_time: form.params.wait_time,
             wait_for_selector: form.params.wait_for_selector,
-            wait_timeout: form.params.timeout,
-            max_retries: form.max_retries,
-            block_images: form.params.block_images,
-            no_css: form.params.no_css,
-            stealth: form.params.stealth,
+            timeout: form.params.timeout,
             proxy: form.params.proxy,
             proxy_pool_group: form.params.proxy_pool_group,
-            cookies: form.params.cookies,
-            user_agent: form.params.user_agent
+            cookies: form.params.cookies
         })
-
-        if (res.status === 'success' && res.data) {
-            const data = res.data
-            if (data.list_xpath) form.list_xpath = data.list_xpath
-            if (data.title_xpath) form.title_xpath = data.title_xpath
-            if (data.link_xpath) form.link_xpath = data.link_xpath
-            if (data.time_xpath) form.time_xpath = data.time_xpath
-            
-            ElMessage.success('AI 智能解析完成，已自动填充 XPath 规则')
-            
-            // 自动跳转到规则校验（可选，或者提示用户手动校验）
-            ElMessageBox.confirm('AI 已生成初步规则，是否立即进行规则校验以验证准确性？', '解析成功', {
-                confirmButtonText: '立即校验',
-                cancelButtonText: '稍后手动校验',
-                type: 'success'
-            }).then(() => {
-                handleTest()
-            }).catch(() => {})
-        } else {
-            ElMessage.warning('AI 未能识别出有效的 XPath 规则，请尝试手动配置')
-        }
+        
+        // 存储在临时状态中，而不是直接覆盖主表单
+        testForm.list_xpath = res.list_xpath || ''
+        testForm.title_xpath = res.title_xpath || ''
+        testForm.link_xpath = res.link_xpath || ''
+        testForm.time_xpath = res.time_xpath || ''
+        testForm.pagination_next_xpath = res.pagination_next_xpath || ''
+        
+        isAiPreview.value = true
+        ElMessage.success('AI 规则生成成功，请在预览界面校验并确认')
+        
+        // 生成成功后，直接调用校验，传入 true 表示来自 AI
+        await handleTest(true)
     } catch (error) {
-        ElMessage.error(error.response?.data?.detail || 'AI 智能解析失败')
+        ElMessage.error(error.response?.data?.detail || '生成失败')
     } finally {
-        aiExtracting.value = false
+        aiGenerating.value = false
     }
 }
 
-const handleTest = async () => {
-    if (!form.url || !form.list_xpath || !form.title_xpath || !form.link_xpath) {
-        ElMessage.warning('请先填写完整的 URL 和基础 XPath 规则')
-        return
+const handleTest = async (fromAi = false) => {
+    // 兼容处理：当通过 @click="handleTest" 调用时，第一个参数是 PointerEvent (也是 truthy)
+    // 我们需要确保只有显式传入 true 时才认为是 AI 模式
+    const isActuallyAi = fromAi === true;
+    console.log('handleTest called, isActuallyAi:', isActuallyAi);
+    
+    // 如果是来自主界面的点击 (不是 AI 模式 且 校验弹窗未打开)，则同步 form -> testForm
+    if (!isActuallyAi && !testResultVisible.value) {
+        const url = String(form.url || '').trim();
+        const list_xpath = String(form.list_xpath || '').trim();
+        const title_xpath = String(form.title_xpath || '').trim();
+        const link_xpath = String(form.link_xpath || '').trim();
+
+        if (!url || !list_xpath || !title_xpath || !link_xpath) {
+            ElMessage.warning('请先填写完整的 URL 和基础 XPath 规则')
+            return
+        }
+        
+        testForm.list_xpath = list_xpath
+        testForm.title_xpath = title_xpath
+        testForm.link_xpath = link_xpath
+        testForm.time_xpath = String(form.time_xpath || '').trim()
+        testForm.pagination_next_xpath = String(form.pagination_next_xpath || '').trim()
+        isAiPreview.value = false
     }
+
+    // 构建 Payload，优先使用 testForm 中的当前值 (因为用户可能在侧边栏进行了修改)
+    const payload = {
+        url: String(form.url || '').trim(),
+        list_xpath: String(testForm.list_xpath || '').trim(),
+        title_xpath: String(testForm.title_xpath || '').trim(),
+        link_xpath: String(testForm.link_xpath || '').trim(),
+        time_xpath: String(testForm.time_xpath || '').trim(),
+        pagination_next_xpath: String(testForm.pagination_next_xpath || '').trim(),
+        // 规则校验强制使用 DrissionPage (dp) 以获取最佳 HTML
+        engine: 'drissionpage', 
+        wait_for: form.params.wait_for,
+        wait_time: form.params.wait_time,
+        wait_for_selector: form.params.wait_for_selector,
+        wait_timeout: form.params.timeout,
+        max_retries: form.max_retries,
+        block_images: form.params.block_images,
+        no_css: form.params.no_css,
+        stealth: form.params.stealth,
+        proxy: form.params.proxy,
+        proxy_pool_group: form.params.proxy_pool_group,
+        cookies: form.params.cookies,
+        user_agent: form.params.user_agent
+    }
+
+    // 确保 testForm 与 payload 同步，这样 injectedHtml 才能使用正确的 XPath
+    if (!isActuallyAi) {
+         testForm.list_xpath = payload.list_xpath;
+         testForm.title_xpath = payload.title_xpath;
+         testForm.link_xpath = payload.link_xpath;
+         testForm.time_xpath = payload.time_xpath;
+         testForm.pagination_next_xpath = payload.pagination_next_xpath;
+    }
+
+    console.log('Current testForm state:', JSON.parse(JSON.stringify(testForm)));
+    console.log('Sending testScraper request with payload:', payload);
 
     testing.value = true
     try {
-        const res = await testScraper({
-            url: form.url,
-            list_xpath: form.list_xpath,
-            title_xpath: form.title_xpath,
-            link_xpath: form.link_xpath,
-            time_xpath: form.time_xpath,
-            // 同步浏览器配置到测试接口
-            engine: form.params.engine,
-            wait_for: form.params.wait_for,
-            wait_time: form.params.wait_time,
-            wait_for_selector: form.params.wait_for_selector,
-            wait_timeout: form.params.timeout,
-            max_retries: form.max_retries,
-            block_images: form.params.block_images,
-            no_css: form.params.no_css,
-            stealth: form.params.stealth,
-            proxy: form.params.proxy,
-            proxy_pool_group: form.params.proxy_pool_group,
-            cookies: form.params.cookies,
-            user_agent: form.params.user_agent
-        })
+        const res = await testScraper(payload)
         testResults.items = res.items
         testResults.html = res.html
         testResultVisible.value = true
@@ -1593,15 +1798,53 @@ const handleTest = async () => {
         activeXPathField.value = ['list', 'title']
         ElMessage.success(`校验成功，提取到 ${res.items.length} 条数据`)
     } catch (error) {
+        console.error('testScraper error:', error);
         ElMessage.error(error.response?.data?.detail || '校验失败')
     } finally {
         testing.value = false
     }
 }
 
+const confirmAiRules = () => {
+    form.list_xpath = testForm.list_xpath
+    form.title_xpath = testForm.title_xpath
+    form.link_xpath = testForm.link_xpath
+    form.time_xpath = testForm.time_xpath
+    form.pagination_next_xpath = testForm.pagination_next_xpath
+    
+    isAiPreview.value = false
+    ElMessage.success('AI 规则已正式应用到配置')
+}
+
+// 监听来自 iframe 的定位结果消息
+const handleIframeMessage = (event) => {
+    if (event.data.type === 'locateResult') {
+        if (event.data.count > 0) {
+            ElMessage.success({
+                message: `定位成功：找到 ${event.data.count} 个元素 (${event.data.fieldType})`,
+                grouping: true
+            });
+        } else {
+            ElMessage.warning({
+                message: `未找到匹配元素：${event.data.xpath}`,
+                grouping: true
+            });
+            if (event.data.error) {
+                console.error('Locate error from iframe:', event.data.error);
+            }
+        }
+    }
+}
+
 onMounted(() => {
     fetchData()
     loadProxyGroups()
+    window.addEventListener('message', handleIframeMessage)
+})
+
+import { onUnmounted } from 'vue'
+onUnmounted(() => {
+    window.removeEventListener('message', handleIframeMessage)
 })
 </script>
 
@@ -2042,5 +2285,47 @@ onMounted(() => {
     width: 100%;
     height: 100%;
     border: none;
+}
+
+.add-btn {
+  padding: 8px 20px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 6px rgba(64, 158, 255, 0.2);
+  border: none;
+  background: linear-gradient(135deg, #409eff 0%, #3a8ee6 100%);
+}
+
+.add-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.4);
+  background: linear-gradient(135deg, #66b1ff 0%, #409eff 100%);
+  opacity: 0.9;
+}
+
+.add-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+}
+
+.add-btn i {
+  margin-right: 6px;
+  font-size: 16px;
+  vertical-align: middle;
+}
+
+.add-btn span {
+  vertical-align: middle;
+}
+
+.flex-buttons {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    margin-bottom: 8px;
+}
+.flex-1 {
+    flex: 1;
 }
 </style>

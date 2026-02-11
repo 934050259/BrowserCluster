@@ -85,6 +85,7 @@ class ScraperTestRequest(BaseModel):
     title_xpath: str
     link_xpath: str
     time_xpath: Optional[str] = None
+    pagination_next_xpath: Optional[str] = None
     engine: str = "playwright"
     wait_for: str = "networkidle"
     wait_time: int = 3000
@@ -99,18 +100,10 @@ class ScraperTestRequest(BaseModel):
     proxy_pool_group: Optional[str] = None
     cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None
 
-class AIExtractRequest(BaseModel):
+class AiRuleGenerationRequest(BaseModel):
     url: HttpUrl
-    engine: str = "playwright"
-    wait_for: str = "networkidle"
-    wait_time: int = 3000
     wait_for_selector: Optional[str] = None
-    user_agent: Optional[str] = None
-    wait_timeout: Optional[int] = 30000
-    block_images: bool = True
-    no_css: bool = True
-    stealth: bool = True
-    max_retries: int = 2
+    timeout: int = 30000
     proxy: Optional[Dict[str, Any]] = None
     proxy_pool_group: Optional[str] = None
     cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None
