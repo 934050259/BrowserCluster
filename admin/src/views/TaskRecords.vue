@@ -548,7 +548,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, Refresh, Search, Link, View, CopyDocument, Timer, CircleCheck, CircleClose, Cpu, QuestionFilled, Key, InfoFilled, Watch, Connection, Files, Monitor, MagicStick, Setting, Box, Right, Delete, Document, Loading, RefreshRight } from '@element-plus/icons-vue'
-import { getTasks, getTask, getSchedule, deleteTask, deleteTasksBatch } from '../api'
+import { getTasks, getTask, getSchedule, getScraper, deleteTask, deleteTasksBatch } from '../api'
 import dayjs from 'dayjs'
 
 const route = useRoute()
@@ -644,10 +644,16 @@ const loadTasks = async () => {
 const loadScheduleInfo = async () => {
   if (!scheduleId) return
   try {
-    const data = await getSchedule(scheduleId)
-    scheduleName.value = data.name
+    if (scheduleId.startsWith('scraper_')) {
+      const scraperId = scheduleId.replace('scraper_', '')
+      const data = await getScraper(scraperId)
+      scheduleName.value = data.name
+    } else {
+      const data = await getSchedule(scheduleId)
+      scheduleName.value = data.name
+    }
   } catch (e) {
-    console.error('Fetch schedule info failed:', e)
+    console.error('Fetch schedule/scraper info failed:', e)
   }
 }
 
@@ -662,7 +668,11 @@ const resetFilter = () => {
 }
 
 const goBack = () => {
-  router.push('/schedules')
+  if (scheduleId && scheduleId.startsWith('scraper_')) {
+    router.push('/scrapers')
+  } else {
+    router.push('/schedules')
+  }
 }
 
 const handleSelectionChange = (val) => {

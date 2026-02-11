@@ -317,6 +317,11 @@ export const getScrapers = async () => {
   return response.data
 }
 
+export const getScraper = async (id) => {
+  const response = await api.get(`/scrapers/${id}`)
+  return response.data
+}
+
 export const createScraper = async (data) => {
   const response = await api.post('/scrapers/', data)
   return response.data

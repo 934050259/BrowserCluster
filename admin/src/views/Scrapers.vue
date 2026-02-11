@@ -71,7 +71,7 @@
             {{ formatTime(row.updated_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="250" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button-group>
               <el-button 
@@ -82,6 +82,14 @@
                 icon="VideoPlay"
               >
                 {{ runningScrapers.has(row._id) ? '正在执行' : '执行' }}
+              </el-button>
+              <el-button 
+                type="info" 
+                size="small" 
+                @click="handleViewResults(row)"
+                icon="Search"
+              >
+                数据
               </el-button>
               <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
               <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
@@ -1577,6 +1585,13 @@ const handleAdd = () => {
         cron: ''
     })
     dialogVisible.value = true
+}
+
+const handleViewResults = (row) => {
+    router.push({
+        name: 'TaskRecords',
+        query: { schedule_id: `scraper_${row._id}` }
+    })
 }
 
 const handleEdit = async (row) => {

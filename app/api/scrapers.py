@@ -41,6 +41,17 @@ async def create_scraper(scraper: ScraperCreate, current_user: dict = Depends(ge
         
     return doc
 
+@router.get("/{scraper_id}", response_model=ScraperResponse)
+async def get_scraper(scraper_id: str, current_user: dict = Depends(get_current_user)):
+    if not ObjectId.is_valid(scraper_id):
+        raise HTTPException(status_code=400, detail="Invalid ID")
+    
+    doc = mongo.db.scrapers.find_one({"_id": ObjectId(scraper_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Scraper not found")
+        
+    return doc
+
 @router.put("/{scraper_id}", response_model=ScraperResponse)
 async def update_scraper(scraper_id: str, scraper: ScraperUpdate, current_user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(scraper_id):
