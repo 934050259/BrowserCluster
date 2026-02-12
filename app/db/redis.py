@@ -21,36 +21,64 @@ class RedisClient:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def connect_cache(self):
+    def connect_cache(self, force_reconnect: bool = False):
         """
         连接到缓存 Redis 实例
+
+        Args:
+            force_reconnect: 是否强制重新建立连接
 
         Returns:
             Redis: Redis 客户端实例
         """
-        if self._cache_client is None:
+        # 检查配置是否发生变化
+        url_changed = getattr(self, '_current_cache_url', None) != settings.redis_cache_url
+        
+        if self._cache_client is None or url_changed or force_reconnect:
+            if self._cache_client:
+                try:
+                    self._cache_client.close()
+                except:
+                    pass
+                    
             self._cache_client = redis.from_url(
                 settings.redis_cache_url, 
                 decode_responses=True,
                 health_check_interval=30,
                 retry_on_timeout=True
             )
+            self._current_cache_url = settings.redis_cache_url
+            
         return self._cache_client
 
-    def connect_queue(self):
+    def connect_queue(self, force_reconnect: bool = False):
         """
         连接到队列 Redis 实例
+
+        Args:
+            force_reconnect: 是否强制重新建立连接
 
         Returns:
             Redis: Redis 客户端实例
         """
-        if self._queue_client is None:
+        # 检查配置是否发生变化
+        url_changed = getattr(self, '_current_queue_url', None) != settings.redis_url
+        
+        if self._queue_client is None or url_changed or force_reconnect:
+            if self._queue_client:
+                try:
+                    self._queue_client.close()
+                except:
+                    pass
+                    
             self._queue_client = redis.from_url(
                 settings.redis_url, 
                 decode_responses=True,
                 health_check_interval=30,
                 retry_on_timeout=True
             )
+            self._current_queue_url = settings.redis_url
+            
         return self._queue_client
 
     def connect_proxy(self):

@@ -16,7 +16,7 @@ COPY admin/ .
 RUN npm run build
 
 # Runtime Stage for Backend
-FROM python:3.10-slim
+FROM python:3.10
 
 WORKDIR /app
 
@@ -49,6 +49,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     libxml2-dev \
     libxslt-dev \
+    zlib1g-dev \
+    libxml2 \
+    libxslt1.1 \
     chromium \
     # 补充 DrissionPage 运行可能需要的额外依赖 (如显示驱动支持)
     libxss1 \

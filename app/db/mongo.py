@@ -20,17 +20,24 @@ class MongoDB:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def connect(self):
+    def connect(self, force_reconnect: bool = False):
         """
         连接到 MongoDB
+
+        Args:
+            force_reconnect: 是否强制重新建立连接
 
         Returns:
             Database: MongoDB 数据库实例
         """
-        if self._client is None:
+        if self._client is None or force_reconnect:
             self._client = MongoClient(settings.mongo_uri)
+            
+        # 检查数据库名是否与配置一致，不一致则切换（支持热重载配置）
+        if self._db is None or self._db.name != settings.mongo_db or force_reconnect:
             self._db = self._client[settings.mongo_db]
             self._init_indexes()
+            
         return self._db
 
     def _init_indexes(self):

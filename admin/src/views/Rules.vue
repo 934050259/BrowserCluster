@@ -75,7 +75,7 @@
         </el-table-column>
         <el-table-column label="提取模式" width="120">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.parser_type === 'gne' ? (row.parser_config?.mode === 'list' ? 'info' : 'success') : 'primary'" effect="plain">
+            <el-tag size="small" :type="row.parser_type === 'gne' ? 'success' : 'primary'" effect="plain">
               {{ getExtractionModeText(row) }}
             </el-tag>
           </template>
@@ -279,32 +279,12 @@
                 <div class="section-title">解析详细配置</div>
                 <!-- GNE Config -->
                 <div v-if="form.parser_type === 'gne'" class="parser-config-area">
-                  <el-form-item label="提取模式">
-                    <el-radio-group v-model="form.parser_config.mode" size="small">
-                      <el-radio-button label="detail">详情模式</el-radio-button>
-                      <el-radio-button label="list">列表模式</el-radio-button>
-                    </el-radio-group>
-                  </el-form-item>
-
-                  <div v-if="form.parser_config.mode === 'list'" class="mt-4">
-                    <el-form-item label="列表项 XPath">
-                      <el-input 
-                        v-model="form.parser_config.list_xpath" 
-                        placeholder="例如: //ul/li[1]/a 或 /html/body/div/ul/li[1]/a"
-                        clearable
-                      >
-                        <template #prefix><el-icon><Search /></el-icon></template>
-                      </el-input>
-                      <div class="input-tip">提示：指定列表中任意一个标题元素的 XPath，GNE 将以此为特征自动识别整个列表。</div>
-                    </el-form-item>
-                  </div>
-
                   <el-alert 
-                    :title="form.parser_config.mode === 'list' ? 'GNE 列表模式' : 'GNE 详情模式'" 
+                    title="GNE 详情模式" 
                     type="info" 
                     :closable="false" 
                     show-icon
-                    :description="form.parser_config.mode === 'list' ? '自动识别并提取新闻、博客列表页中的标题、链接及发布日期。' : '适用于新闻、博客等文章类页面，自动提取标题、作者、发布时间、正文和图片。'"
+                    description="适用于新闻、博客等文章类页面，自动提取标题、作者、发布时间、正文和图片。"
                   />
                 </div>
 
@@ -932,7 +912,7 @@ const getParserTypeTag = (type) => {
 
 const getExtractionModeText = (row) => {
   if (row.parser_type === 'gne') {
-    return row.parser_config?.mode === 'list' ? '列表模式' : '详情模式'
+    return '详情模式'
   }
   if (row.parser_type === 'llm') {
     return '智能提取'

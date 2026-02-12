@@ -7,11 +7,10 @@ import json
 import logging
 from typing import Dict, Any, Optional, List
 try:
-    from gne import GeneralNewsExtractor, ListPageExtractor
+    from gne import GeneralNewsExtractor
     GNE_AVAILABLE = True
 except ImportError:
     GeneralNewsExtractor = None
-    ListPageExtractor = None
     GNE_AVAILABLE = False
 from openai import AsyncOpenAI
 from lxml import html as lxml_html
@@ -81,16 +80,6 @@ class ParserService:
             logger.warning("GNE is not installed, skipping extraction")
             return {"error": "GNE is not installed on this node. Please install it or use XPath/LLM parser."}
         try:
-            config = config or {}
-            
-            if config.get("mode") == "list":
-                if not ListPageExtractor:
-                    return {"error": "ListPageExtractor not available in GNE"}
-                extractor = ListPageExtractor()
-                # 列表模式需要传递 feature 参数，这里使用用户配置的 list_xpath
-                feature = config.get("list_xpath") or ""
-                return extractor.extract(html, feature)
-            
             extractor = GeneralNewsExtractor()
             return extractor.extract(html)
         except Exception as e:

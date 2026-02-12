@@ -362,39 +362,12 @@
               </el-form-item>
 
               <div v-if="form.params && form.params.parser === 'gne'" class="parser-config-area">
-                <el-form-item label="提取模式">
-                  <el-radio-group v-model="form.params.parser_config.mode" size="small">
-                    <el-radio-button label="detail">详情模式</el-radio-button>
-                    <el-radio-button label="list">列表模式</el-radio-button>
-                  </el-radio-group>
-                </el-form-item>
-
-                <el-form-item 
-                  v-if="form.params.parser_config.mode === 'list'" 
-                  label="列表项 XPath" 
-                  prop="params.parser_config.list_xpath"
-                  required
-                >
-                  <el-input 
-                    v-model="form.params.parser_config.list_xpath" 
-                    placeholder="例如: /html/body/div/div/ul/li[1]/a"
-                  >
-                    <template #prefix>
-                      <el-icon><Search /></el-icon>
-                    </template>
-                  </el-input>
-                  <div class="input-tip">
-                    <el-icon><InfoFilled /></el-icon>
-                    GNE 列表模式必须指定一个代表性的列表项标题 XPath
-                  </div>
-                </el-form-item>
-
                 <el-alert 
-                  :title="form.params.parser_config.mode === 'list' ? 'GAE 列表模式' : 'GAE 详情模式'" 
+                  title="GAE 详情模式" 
                   type="info" 
                   :closable="false" 
                   show-icon 
-                  :description="form.params.parser_config.mode === 'list' ? '自动识别并提取新闻、博客列表页中的标题、链接及发布日期。' : '适用于新闻、博客等文章类页面，自动提取标题、作者、发布时间、正文和图片。'" 
+                  description="适用于新闻、博客等文章类页面，自动提取标题、作者、发布时间、正文和图片。" 
                 />
               </div>
 
@@ -904,10 +877,7 @@ const applyMatchedRule = (rule, silent = false) => {
     xpathRules.value = Object.entries(rules).map(([field, path]) => ({ name: field, xpath: path }))
     form.value.params.parser_config.rules = { ...rules }
   } else if (rule.parser_type === 'gne') {
-    form.value.params.parser_config.mode = rule.parser_config.mode || 'detail'
-    if (rule.parser_config.mode === 'list') {
-      form.value.params.parser_config.list_xpath = rule.parser_config.list_xpath || ''
-    }
+    form.value.params.parser_config.mode = 'detail'
   }
 
   // 应用浏览器特征和高级配置
@@ -1336,16 +1306,7 @@ const handleSubmit = async () => {
       })
       submitData.params.parser_config = { rules }
     } else if (submitData.params.parser === 'gne') {
-      const mode = submitData.params.parser_config?.mode || 'detail'
-      const list_xpath = submitData.params.parser_config?.list_xpath || ''
-      
-      if (mode === 'list' && !list_xpath) {
-        ElMessage.warning('GNE 列表模式下，列表项 XPath 为必填项')
-        submitting.value = false
-        return
-      }
-      
-      submitData.params.parser_config = { mode, list_xpath }
+      submitData.params.parser_config = { mode: 'detail' }
     } else {
       submitData.params.parser_config = null
     }

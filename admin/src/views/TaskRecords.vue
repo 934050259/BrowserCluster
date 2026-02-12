@@ -357,7 +357,7 @@
                   </template>
                   <div class="value-content">
                     <el-tag type="warning" size="small" v-if="currentTask.params?.parser === 'gne'">
-                      GNE - {{ currentTask.params?.parser_config?.mode === 'list' ? '列表模式' : '详情模式' }}
+                      GNE - 详情模式
                     </el-tag>
                     <el-tag type="success" size="small" v-else-if="currentTask.params?.parser === 'llm'">LLM 大模型提取</el-tag>
                     <el-tag type="primary" size="small" v-else-if="currentTask.params?.parser === 'xpath'">XPath 自定义</el-tag>
@@ -403,11 +403,7 @@
                     <div class="label-box"><el-icon><Setting /></el-icon><span>解析规则</span></div>
                   </template>
                   <div class="value-content rule-content">
-                    <template v-if="currentTask.params.parser === 'gne' && currentTask.params.parser_config?.mode === 'list'">
-                      <span class="rule-label">列表 XPath:</span>
-                      <code>{{ currentTask.params.parser_config.list_xpath || '-' }}</code>
-                    </template>
-                    <template v-else-if="currentTask.params.parser === 'xpath'">
+                    <template v-if="currentTask.params.parser === 'xpath'">
                       <div class="rule-tags">
                         <el-tag v-for="(path, field) in currentTask.params.parser_config?.rules" :key="field" size="small" class="mr-2 mb-1">
                           <span class="field-name">{{ field }}:</span> {{ path }}
