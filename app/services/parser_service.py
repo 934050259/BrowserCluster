@@ -213,7 +213,6 @@ HTML 片段:
 请注意：
 - 对于具有多个类名的元素（例如 <div class="pagination mb20">），**严禁**使用 `@class='pagination'` 这种完全匹配语法，必须使用 `contains(@class, 'pagination')` 这种部分匹配语法。
 - 严禁在生成的 XPath 末尾添加多余的斜杠 `/`。
-- list_xpath、title_xpath、link_xpath 是必需的。
 - pagination_next_xpath 必须是能够定位到“下一页”或者翻页按钮。
 - 如果找不到某个字段，value 设为 null。
 - 请以 JSON 格式返回，key 为上述字段名，value 为 XPath 字符串。

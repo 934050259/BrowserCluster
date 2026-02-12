@@ -913,7 +913,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, computed, watch } from 'vue'
+import { ref, onMounted, reactive, computed, watch, onUnmounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick } from '@element-plus/icons-vue'
@@ -1539,9 +1539,12 @@ const formatTime = (time) => {
     return new Date(time).toLocaleString()
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
     isEdit.value = false
     activeTab.value = 'basic'
+    
+    // 确保在打开弹窗前，规则列表是最新的
+    await fetchRules()
     
     // 初始化表单默认值
     Object.assign(form, {
@@ -1920,7 +1923,10 @@ onMounted(() => {
     window.addEventListener('message', handleIframeMessage)
 })
 
-import { onUnmounted } from 'vue'
+onActivated(() => {
+    fetchData()
+})
+
 onUnmounted(() => {
     window.removeEventListener('message', handleIframeMessage)
 })
