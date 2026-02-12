@@ -168,7 +168,7 @@
                       <el-icon v-if="!isNavigating"><Setting /></el-icon>去配置规则
                     </el-button>
                   </div>
-                  <div class="input-tip">
+                  <div class="input-tip" style="color: rgb(238, 118, 82);">
                     <span v-if="currentDomain">已按域名 <code>{{ currentDomain }}</code> 自动筛选。</span>
                     <span>选择用于解析详情页的网站配置规则。</span>
                   </div>
@@ -1053,30 +1053,42 @@ const handleBatchDelete = () => {
 const handleRun = async (row) => {
     if (runningScrapers.value.has(row._id)) return
     
-    try {
-        runningScrapers.value.add(row._id)
-        saveRunningStatus()
-        
-        await runScraper(row._id)
-        ElMessage.success(`测试任务 "${row.name}" 已提交`)
-        
-        // 提交成功后保持 5 秒的“正在测试”状态，给用户明确反馈
-        setTimeout(() => {
+    ElMessageBox.confirm(
+        `确定要立即对站点 "${row.name}" 执行采集测试吗？`,
+        '测试确认',
+        {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'info'
+        }
+    ).then(async () => {
+        try {
+            runningScrapers.value.add(row._id)
+            saveRunningStatus()
+            
+            await runScraper(row._id)
+            ElMessage.success(`测试任务 "${row.name}" 已提交`)
+            
+            // 提交成功后保持 5 秒的“正在测试”状态，给用户明确反馈
+            setTimeout(() => {
+                runningScrapers.value.delete(row._id)
+                saveRunningStatus()
+            }, 5000)
+        } catch (error) {
             runningScrapers.value.delete(row._id)
             saveRunningStatus()
-        }, 5000)
-    } catch (error) {
-        runningScrapers.value.delete(row._id)
-        saveRunningStatus()
-        
-        const errorMsg = error.response?.data?.detail || error.message || '测试任务提交失败'
-        
-        ElMessageBox.alert(errorMsg, '测试失败', {
-            confirmButtonText: '确定',
-            type: 'error',
-            customClass: 'error-message-box'
-        })
-    }
+            
+            const errorMsg = error.response?.data?.detail || error.message || '测试任务提交失败'
+            
+            ElMessageBox.alert(errorMsg, '测试失败', {
+                confirmButtonText: '确定',
+                type: 'error',
+                customClass: 'error-message-box'
+            })
+        }
+    }).catch(() => {
+        // 取消执行，不做任何操作
+    })
 }
 
 // 提取域名逻辑
@@ -2109,7 +2121,7 @@ onUnmounted(() => {
     background: #f1f5f9;
     padding: 2px 4px;
     border-radius: 4px;
-    color: #475569;
+    color: #2b62ad;
 }
 .feature-settings {
     display: grid;
