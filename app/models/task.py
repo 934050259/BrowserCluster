@@ -41,6 +41,7 @@ class ScrapeParams(BaseModel):
     mongo_collection: Optional[str] = None  # 自定义 MongoDB 表名
     oss_path: Optional[str] = None  # 自定义 OSS 存储路径
     max_retries: int = 2  # 采集失败重试次数
+    matched_rule: Optional[str] = None  # 匹配到的规则域名 (仅记录用)
 
 
 class CacheConfig(BaseModel):

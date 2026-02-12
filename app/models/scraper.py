@@ -21,6 +21,10 @@ class ScraperBase(BaseModel):
     pagination_next_xpath: Optional[str] = Field(None, description="下一页按钮 XPath")
     max_pages: int = Field(1, ge=1, description="最大采集页数")
     
+    # 兼容前端的嵌套结构
+    params: Dict[str, Any] = Field(default_factory=dict, description="抓取参数")
+    cache: Dict[str, Any] = Field(default_factory=lambda: {"enabled": True, "ttl": 3600}, description="缓存配置")
+    
     # 浏览器通用配置 (同步自 ScrapeParams)
     engine: str = Field("playwright", description="浏览器引擎: playwright, drissionpage")
     wait_for: str = Field("networkidle", description="等待策略: networkidle, load, domcontentloaded")

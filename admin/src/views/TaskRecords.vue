@@ -357,7 +357,7 @@
                   </template>
                   <div class="value-content">
                     <el-tag type="warning" size="small" v-if="currentTask.params?.parser === 'gne'">
-                      GNE - 详情模式
+                      GNE 智能解析
                     </el-tag>
                     <el-tag type="success" size="small" v-else-if="currentTask.params?.parser === 'llm'">LLM 大模型提取</el-tag>
                     <el-tag type="primary" size="small" v-else-if="currentTask.params?.parser === 'xpath'">XPath 自定义</el-tag>
@@ -365,8 +365,8 @@
                   </div>
                 </el-descriptions-item>
 
-                <!-- 第七行：存储位置 -->
-                <el-descriptions-item :span="2">
+                <!-- 第七行：存储位置与代理信息 -->
+                <el-descriptions-item>
                   <template #label>
                     <div class="label-box"><el-icon><Box /></el-icon><span>存储位置</span></div>
                   </template>
@@ -377,14 +377,6 @@
                         <span>{{ currentTask.params.storage_type === 'mongo' ? 'MongoDB' : 'Aliyun OSS' }}</span>
                       </div>
                     </el-tag>
-                    <code class="storage-path">
-                      <template v-if="currentTask.params.storage_type === 'mongo'">
-                        集合: {{ currentTask.params.mongo_collection || 'tasks_results' }}
-                      </template>
-                      <template v-else>
-                        路径: {{ currentTask.params.oss_path || 'tasks/' }}{{ currentTask.task_id }}/
-                      </template>
-                    </code>
                   </div>
                   <div class="value-content storage-value" v-else>
                     <el-tag type="info" size="small" class="storage-tag">
@@ -393,8 +385,44 @@
                         <span>MongoDB (默认)</span>
                       </div>
                     </el-tag>
-                    <code class="storage-path">集合: tasks_results</code>
                   </div>
+                </el-descriptions-item>
+
+                <el-descriptions-item>
+                  <template #label>
+                    <div class="label-box"><el-icon><Share /></el-icon><span>代理信息</span></div>
+                  </template>
+                  <div class="value-content">
+                    <template v-if="currentTask.params?.proxy_pool_group">
+                      <el-tag type="success" size="small">
+                        池: {{ currentTask.params.proxy_pool_group }}
+                      </el-tag>
+                    </template>
+                    <template v-else-if="currentTask.params?.proxy?.server">
+                      <el-tooltip :content="currentTask.params.proxy.server" placement="top">
+                        <el-tag type="warning" size="small">固定代理</el-tag>
+                      </el-tooltip>
+                    </template>
+                    <span v-else class="empty-value">直连 (无代理)</span>
+                  </div>
+                </el-descriptions-item>
+
+                <!-- 第八行：存储路径详情 (全行) -->
+                <el-descriptions-item :span="2">
+                  <template #label>
+                    <div class="label-box"><el-icon><Folder /></el-icon><span>存储详情</span></div>
+                  </template>
+                  <code class="storage-path">
+                    <template v-if="currentTask.params?.storage_type === 'mongo'">
+                      集合: {{ currentTask.params.mongo_collection || 'tasks_results' }}
+                    </template>
+                    <template v-else-if="currentTask.params?.storage_type === 'oss'">
+                      路径: {{ currentTask.params.oss_path || 'tasks/' }}{{ currentTask.task_id }}/
+                    </template>
+                    <template v-else>
+                      集合: tasks_results
+                    </template>
+                  </code>
                 </el-descriptions-item>
 
                 <!-- 第七行：解析规则 (全行) -->
@@ -416,6 +444,9 @@
                           {{ field }}
                         </el-tag>
                       </div>
+                    </template>
+                    <template v-else-if="currentTask.params.matched_rule">
+                      <el-tag type="info" size="small">匹配规则: {{ currentTask.params.matched_rule }}</el-tag>
                     </template>
                     <span v-else class="empty-value">系统自动识别</span>
                   </div>
@@ -540,7 +571,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, onActivated, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, Refresh, Search, Link, View, CopyDocument, Timer, CircleCheck, CircleClose, Cpu, QuestionFilled, Key, InfoFilled, Watch, Connection, Files, Monitor, MagicStick, Setting, Box, Right, Delete, Document, Loading, RefreshRight } from '@element-plus/icons-vue'
@@ -549,7 +580,7 @@ import dayjs from 'dayjs'
 
 const route = useRoute()
 const router = useRouter()
-const scheduleId = route.query.schedule_id
+const scheduleId = computed(() => route.query.schedule_id)
 const scheduleName = ref('')
 
 const loading = ref(false)
@@ -613,15 +644,14 @@ watch(activeTab, async (newTab) => {
 })
 
 const loadTasks = async () => {
-  if (!scheduleId) {
-    ElMessage.warning('缺少定时任务 ID')
+  if (!scheduleId.value) {
     return
   }
   
   loading.value = true
   try {
     const params = {
-      schedule_id: scheduleId,
+      schedule_id: scheduleId.value,
       status: filterForm.value.status || undefined,
       url: filterForm.value.url || undefined,
       skip: (currentPage.value - 1) * pageSize.value,
@@ -638,14 +668,14 @@ const loadTasks = async () => {
 }
 
 const loadScheduleInfo = async () => {
-  if (!scheduleId) return
+  if (!scheduleId.value) return
   try {
-    if (scheduleId.startsWith('scraper_')) {
-      const scraperId = scheduleId.replace('scraper_', '')
+    if (scheduleId.value.startsWith('scraper_')) {
+      const scraperId = scheduleId.value.replace('scraper_', '')
       const data = await getScraper(scraperId)
       scheduleName.value = data.name
     } else {
-      const data = await getSchedule(scheduleId)
+      const data = await getSchedule(scheduleId.value)
       scheduleName.value = data.name
     }
   } catch (e) {
@@ -664,7 +694,7 @@ const resetFilter = () => {
 }
 
 const goBack = () => {
-  if (scheduleId && scheduleId.startsWith('scraper_')) {
+  if (scheduleId.value && scheduleId.value.startsWith('scraper_')) {
     router.push('/scrapers')
   } else {
     router.push('/schedules')
@@ -773,9 +803,24 @@ const copyText = (text) => {
 }
 
 onMounted(() => {
+  // onMounted 在 keep-alive 下只执行一次
+  // 逻辑已移至 watch(..., { immediate: true }) 和 onActivated
+})
+
+onActivated(() => {
   loadTasks()
   loadScheduleInfo()
 })
+
+watch(scheduleId, (newId) => {
+  if (newId) {
+    // 切换任务时，必须重置筛选条件和页码，确保加载的是当前任务的最新数据
+    filterForm.value = { status: '', url: '' }
+    currentPage.value = 1
+    loadTasks()
+    loadScheduleInfo()
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>

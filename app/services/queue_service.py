@@ -7,6 +7,7 @@ import pika
 import json
 import logging
 import threading
+import time
 from typing import Dict, Any, Callable
 from app.core.config import settings
 
@@ -108,7 +109,8 @@ class RabbitMQService:
             )
             logger.info(f"Published task {task.get('task_id')} to queue")
             return True
-        except (pika.exceptions.ConnectionClosed, pika.exceptions.StreamLostError, pika.exceptions.AMQPConnectionError) as e:
+        except (pika.exceptions.ConnectionClosed, pika.exceptions.StreamLostError, 
+                pika.exceptions.AMQPConnectionError, ConnectionResetError, OSError) as e:
             logger.warning(f"RabbitMQ connection lost during publish: {e}")
             self._connection = None
             self._channel = None
@@ -128,74 +130,67 @@ class RabbitMQService:
     ):
         """
         开始消费队列中的任务
-
-        Args:
-            callback: 处理任务的回调函数
-            prefetch_count: 预取消息数量
-            should_stop: 可选的停止判断函数
         """
-        channel = None
-        try:
-            channel = self.connect()
-            # 设置预取数量，实现公平分发
-            channel.basic_qos(prefetch_count=prefetch_count)
+        while True:
+            if should_stop and should_stop():
+                break
 
-            def wrapper(ch, method, properties, body):
-                """消息处理包装函数"""
-                try:
-                    # 解析任务
-                    task = json.loads(body)
-                    # 调用回调函数处理任务
-                    callback(task)
-                    
-                    # 注意：由于 callback(task) 内部可能包含异步处理逻辑（如 asyncio.run_coroutine_threadsafe），
-                    # 这里立即确认消息可能存在风险（如果任务还没处理完进程就崩溃了）。
-                    # 但在当前的 worker.py 实现中，回调函数会将协程提交给事件循环。
-                    # 为了确保任务不会因为节点停止而“丢失”且保持 PROCESSING，
-                    # 我们在 worker.py 的 stop() 方法中已经添加了重置状态逻辑。
-                    
-                    # 确认消息已处理
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                except Exception as e:
-                    logger.error(f"Error processing task: {e}")
-                    # 拒绝消息并重新入队，以便其他节点处理或稍后重试
-                    ch.basic_nack(
-                        delivery_tag=method.delivery_tag,
-                        requeue=True
-                    )
+            channel = None
+            try:
+                channel = self.connect()
+                channel.basic_qos(prefetch_count=prefetch_count)
 
-            # 开始消费消息
-            channel.basic_consume(
-                queue=settings.rabbitmq_queue,
-                on_message_callback=wrapper
-            )
+                def wrapper(ch, method, properties, body):
+                    """消息处理包装函数"""
+                    try:
+                        task = json.loads(body)
+                        callback(task)
+                        ch.basic_ack(delivery_tag=method.delivery_tag)
+                    except Exception as e:
+                        logger.error(f"Error processing task: {e}")
+                        try:
+                            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+                        except:
+                            pass
 
-            logger.info("Started consuming tasks...")
-            
-            # 使用循环非阻塞方式消费，以便响应停止信号
-            while True:
-                if should_stop and should_stop():
-                    logger.info("Consumer loop: detected stop signal, exiting...")
-                    break
+                channel.basic_consume(
+                    queue=settings.rabbitmq_queue,
+                    on_message_callback=wrapper
+                )
+
+                logger.info("Started consuming tasks...")
                 
-                try:
-                    # 检查消息，超时时间设为 0.5 秒，更频繁地检查停止信号
-                    self._connection.process_data_events(time_limit=0.5)
-                except Exception as e:
-                    logger.error(f"Error in process_data_events: {e}")
-                    break
+                while True:
+                    if should_stop and should_stop():
+                        logger.info("Consumer loop: detected stop signal, exiting...")
+                        return
+                    
+                    try:
+                        self._connection.process_data_events(time_limit=0.5)
+                    except (pika.exceptions.ConnectionClosed, pika.exceptions.StreamLostError, 
+                            pika.exceptions.AMQPConnectionError, ConnectionResetError, OSError) as e:
+                        logger.warning(f"RabbitMQ connection lost during consumption: {e}. Attempting to reconnect...")
+                        self._connection = None
+                        self._channel = None
+                        break # 跳出内层循环，进入外层循环重连
+                    except Exception as e:
+                        logger.error(f"Unexpected error in process_data_events: {e}")
+                        # 对于非连接错误，记录并稍后重试，避免进程崩溃
+                        time.sleep(1)
                 
-        except KeyboardInterrupt:
-            logger.info("Stopping consumer...")
-        except Exception as e:
-            logger.error(f"Error in consumer: {e}")
-        finally:
-            # 不要在这里关闭单例的连接，只需停止当前消费
-            if channel and not channel.is_closed:
-                try:
-                    channel.stop_consuming()
-                except:
-                    pass
+            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ConnectionClosed, 
+                    ConnectionResetError, OSError) as e:
+                logger.error(f"RabbitMQ connection error: {e}. Retrying in 5 seconds...")
+                time.sleep(5)
+            except Exception as e:
+                logger.error(f"Error in consumer: {e}")
+                time.sleep(5)
+            finally:
+                if channel and not channel.is_closed:
+                    try:
+                        channel.stop_consuming()
+                    except:
+                        pass
 
     def close(self):
         """关闭 RabbitMQ 连接"""

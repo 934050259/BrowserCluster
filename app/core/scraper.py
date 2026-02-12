@@ -131,9 +131,43 @@ class Scraper:
         context = None
         
         try:
+            # 处理代理配置
+            proxy_config = params.get("proxy")
+            proxy_pool_group = params.get("proxy_pool_group")
+            
+            # 如果配置了代理池，从池中获取随机代理
+            if not proxy_config and proxy_pool_group:
+                pool_proxy = await proxy_service.get_random_proxy(proxy_pool_group)
+                if pool_proxy:
+                    proxy_config = {
+                        "server": pool_proxy.server,
+                        "username": pool_proxy.username,
+                        "password": pool_proxy.password
+                    }
+                    logger.info(f"Using proxy from pool group '{proxy_pool_group}': {pool_proxy.server}")
+                else:
+                    logger.warning(f"No available proxy in pool group '{proxy_pool_group}', proceeding without proxy")
+
             browser = await browser_manager.get_browser()
             user_agent = params.get("user_agent") or settings.user_agent
-            context = await browser.new_context(user_agent=user_agent)
+            
+            # 创建浏览器上下文参数
+            context_options = {
+                "java_script_enabled": True,
+                "user_agent": user_agent
+            }
+            
+            if proxy_config:
+                context_options["proxy"] = {
+                    "server": proxy_config.get("server"),
+                }
+                # 添加代理认证
+                if proxy_config.get("username"):
+                    context_options["proxy"]["username"] = proxy_config["username"]
+                if proxy_config.get("password"):
+                    context_options["proxy"]["password"] = proxy_config["password"]
+
+            context = await browser.new_context(**context_options)
             page = await context.new_page()
             
             # 设置反检测
@@ -283,7 +317,9 @@ class Scraper:
                         wait_for_selector=params.get("wait_for_selector"),
                         timeout=int((params.get("wait_timeout") or 30000) / 1000),
                         no_images=params.get("no_images", True),
-                        no_css=params.get("no_css", True)
+                        no_css=params.get("no_css", True),
+                        proxy=params.get("proxy"),
+                        proxy_pool_group=params.get("proxy_pool_group")
                     )
                 else:
                     # 使用 Playwright 抓取
@@ -755,7 +791,8 @@ class Scraper:
                     "actual_url": actual_url,
                     "status_code": status_code,
                     "load_time": load_time,
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "proxy": proxy_config.get("server") if proxy_config else None
                 }
             }
 
@@ -859,7 +896,9 @@ class Scraper:
             # 创建一个新标签页，支持资源拦截配置
             tab = drission_manager.create_tab(
                 no_images=params.get("no_images", False),
-                no_css=params.get("no_css", False)
+                no_css=params.get("no_css", False),
+                proxy=params.get("proxy"),
+                proxy_pool_group=params.get("proxy_pool_group")
             )
             
             # 在新标签页中访问 URL，并设置超时
@@ -932,7 +971,8 @@ class Scraper:
                     "status_code": 200, 
                     "load_time": load_time,
                     "timestamp": time.time(),
-                    "engine": "drissionpage"
+                    "engine": "drissionpage",
+                    "proxy": params.get("proxy", {}).get("server") if params.get("proxy") else None
                 }
             }
         except Exception as e:
@@ -961,19 +1001,34 @@ class Scraper:
         wait_for_selector: str = None,
         timeout: int = 30,
         no_images: bool = False,
-        no_css: bool = False
+        no_css: bool = False,
+        proxy: dict = None,
+        proxy_pool_group: str = None
     ) -> str:
         """
         使用 DrissionPage 验证抓取规则 (获取渲染后的 HTML)
         独立函数，确保资源正确管理和冲突处理
         """
+        # 如果提供了代理池但没提供具体代理，先异步获取一个代理
+        if not proxy and proxy_pool_group:
+            pool_proxy = await proxy_service.get_random_proxy(proxy_pool_group)
+            if pool_proxy:
+                proxy = {
+                    "server": pool_proxy.server,
+                    "username": pool_proxy.username,
+                    "password": pool_proxy.password
+                }
+                logger.info(f"Using proxy from pool group '{proxy_pool_group}' for DrissionPage validation: {pool_proxy.server}")
+
         return await asyncio.to_thread(
             self._sync_validate_with_drission,
             url,
             wait_for_selector,
             timeout,
             no_images,
-            no_css
+            no_css,
+            proxy,
+            proxy_pool_group
         )
 
     def _sync_validate_with_drission(
@@ -982,13 +1037,20 @@ class Scraper:
         wait_for_selector: str = None,
         timeout: int = 30,
         no_images: bool = False,
-        no_css: bool = False
+        no_css: bool = False,
+        proxy: dict = None,
+        proxy_pool_group: str = None
     ) -> str:
         """同步执行 DrissionPage 验证"""
         tab = None
         try:
             # 使用线程安全的方法创建标签页
-            tab = drission_manager.create_tab(no_images=no_images, no_css=no_css)
+            tab = drission_manager.create_tab(
+                no_images=no_images, 
+                no_css=no_css,
+                proxy=proxy,
+                proxy_pool_group=proxy_pool_group
+            )
             
             # 访问页面
             tab.get(url, timeout=timeout)

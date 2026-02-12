@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse
 from bson import ObjectId
 from app.db.mongo import mongo
 from app.core.scraper import Scraper
@@ -6,6 +7,36 @@ from app.services.task_service import task_service
 from app.models.task import ScrapeRequest, ScrapeParams
 
 logger = logging.getLogger(__name__)
+
+def _match_rule_by_url(url: str):
+    """根据 URL 匹配解析规则"""
+    try:
+        domain = urlparse(url).netloc
+        # 获取所有启用的规则，按优先级排序
+        rules = list(mongo.db.parsing_rules.find({"is_active": True}).sort("priority", -1))
+        
+        for rule in rules:
+            rule_domain = rule.get("domain", "")
+            if not rule_domain:
+                continue
+                
+            # 1. 精确匹配
+            if rule_domain == domain:
+                return rule
+            
+            # 2. 通配符匹配 (如 *.example.com)
+            if rule_domain.startswith("*."):
+                suffix = rule_domain[1:] # .example.com
+                if domain.endswith(suffix):
+                    return rule
+            
+            # 3. 父域名匹配 (如果规则是 example.com，也匹配 sub.example.com)
+            if domain.endswith("." + rule_domain):
+                return rule
+                
+    except Exception as e:
+        logger.warning(f"Error matching rule for URL {url}: {e}")
+    return None
 
 async def execute_scraper_task(scraper_doc: dict):
     """后台执行站点采集任务"""
@@ -22,8 +53,52 @@ async def execute_scraper_task(scraper_doc: dict):
         
         scraper = Scraper()
         
+        # 0. 获取规则信息（如果关联了规则，或者根据域名自动匹配）
+        rule_id = scraper_doc.get("rule_id")
+        rule_doc = None
+        if rule_id:
+            try:
+                # 兼容不同 ID 类型
+                query = {}
+                if ObjectId.is_valid(rule_id):
+                    query["_id"] = ObjectId(rule_id)
+                else:
+                    query["id"] = rule_id
+                
+                rule_doc = mongo.db.parsing_rules.find_one(query)
+            except Exception as e:
+                logger.warning(f"Failed to fetch rule {rule_id}: {e}")
+        
+        # 如果没有明确关联规则，尝试根据 URL 域名自动匹配
+        if not rule_doc:
+            rule_doc = _match_rule_by_url(scraper_doc["url"])
+            if rule_doc:
+                logger.info(f"Automatically matched rule {rule_doc.get('domain')} for scraper {scraper_name}")
+        
         # 1. 抓取列表页并提取项
         params_config = scraper_doc.get("params", {})
+        
+        # 提取代理配置 (优先级: scraper > rule)
+        proxy_pool_group = scraper_doc.get("proxy_pool_group") or params_config.get("proxy_pool_group")
+        proxy = scraper_doc.get("proxy") or params_config.get("proxy")
+        
+        # 统一处理空字符串和空对象
+        if not proxy_pool_group:
+            proxy_pool_group = None
+        if proxy and not proxy.get("server"):
+            proxy = None
+        
+        # 如果 scraper 本身没设代理，尝试从关联规则中继承
+        if not proxy_pool_group and not proxy:
+            if rule_doc:
+                proxy_pool_group = rule_doc.get("proxy_pool_group")
+                proxy = rule_doc.get("proxy")
+                
+                # 再次处理从规则中继承的可能为空的值
+                if not proxy_pool_group:
+                    proxy_pool_group = None
+                if proxy and not proxy.get("server"):
+                    proxy = None
         
         # 兼容旧数据，如果 params 为空则从顶级获取
         def get_val(key, default=None):
@@ -47,8 +122,8 @@ async def execute_scraper_task(scraper_doc: dict):
                 "no_css": get_val("no_css", True),
                 "block_images": get_val("block_images", False),
                 "block_media": get_val("block_media", False),
-                "proxy": get_val("proxy"),
-                "proxy_pool_group": get_val("proxy_pool_group"),
+                "proxy": proxy,
+                "proxy_pool_group": proxy_pool_group,
                 "cookies": get_val("cookies"),
                 "intercept_apis": get_val("intercept_apis"),
                 "intercept_continue": get_val("intercept_continue", False),
@@ -64,22 +139,6 @@ async def execute_scraper_task(scraper_doc: dict):
             
         items = result.get("items", [])
         logger.info(f"Extracted {len(items)} items from {scraper_doc['url']}")
-        
-        # 2. 获取规则信息（如果关联了规则）
-        rule_id = scraper_doc.get("rule_id")
-        rule_doc = None
-        if rule_id:
-            try:
-                # 兼容不同 ID 类型
-                query = {}
-                if ObjectId.is_valid(rule_id):
-                    query["_id"] = ObjectId(rule_id)
-                else:
-                    query["id"] = rule_id
-                
-                rule_doc = mongo.db.parsing_rules.find_one(query)
-            except Exception as e:
-                logger.warning(f"Failed to fetch rule {rule_id}: {e}")
         
         # 3. 为每个提取到的链接创建采集任务
         count = 0
@@ -99,8 +158,8 @@ async def execute_scraper_task(scraper_doc: dict):
                 block_images=get_val("block_images", get_val("no_images", True)),
                 block_media=get_val("block_media", False),
                 user_agent=get_val("user_agent"),
-                proxy=get_val("proxy"),
-                proxy_pool_group=get_val("proxy_pool_group"),
+                proxy=proxy,
+                proxy_pool_group=proxy_pool_group,
                 cookies=get_val("cookies"),
                 intercept_apis=get_val("intercept_apis"),
                 intercept_continue=get_val("intercept_continue", False),
@@ -116,6 +175,7 @@ async def execute_scraper_task(scraper_doc: dict):
             if rule_doc:
                 params.parser = rule_doc.get("parser_type")
                 params.parser_config = rule_doc.get("parser_config")
+                params.matched_rule = rule_doc.get("domain")
                 
                 # 也可以带入一些默认采集配置
                 if rule_doc.get("parser_type") == "gne":

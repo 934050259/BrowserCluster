@@ -75,6 +75,10 @@ class Worker:
         
         if matched_rule:
             logger.info(f"Applying rule settings for domain {domain} (Rule: {matched_rule['domain']})")
+            # 记录匹配到的规则信息
+            params["matched_rule"] = matched_rule.get("domain")
+            applied_changes = True
+            
             # 1. 解析配置 (如果任务没有指定)
             if not params.get("parser"):
                 params["parser"] = matched_rule.get("parser_type")
@@ -85,19 +89,37 @@ class Worker:
             sync_fields = [
                 "engine", "wait_for", "timeout", "viewport", "stealth", 
                 "save_html", "screenshot", "is_fullscreen", "block_images",
-                "intercept_apis", "intercept_continue", "proxy",
+                "intercept_apis", "intercept_continue", "proxy", "proxy_pool_group",
                 "storage_type", "mongo_collection", "oss_path"
             ]
             
+            applied_changes = False
             for field in sync_fields:
+                # 特殊处理 proxy: 如果是空对象也视为 None，以便继承规则中的代理
+                val = params.get(field)
+                if field == "proxy" and isinstance(val, dict) and not val.get("server"):
+                    val = None
+                
                 # 如果任务 params 中没有该字段，或者该字段是空的/默认的，则使用规则配置
-                # 注意：这里需要谨慎判断，避免覆盖用户在新建任务时明确设置的参数
-                if field not in params or params[field] is None:
+                if field not in params or val is None:
                     params[field] = matched_rule.get(field)
+                    applied_changes = True
             
             # 3. Cookies (如果任务没有指定)
             if not params.get("cookies") and matched_rule.get("cookies"):
                 params["cookies"] = matched_rule.get("cookies")
+                applied_changes = True
+
+            # 如果应用了规则中的配置，同步回数据库以便前端显示正确的代理/参数信息
+            if applied_changes:
+                try:
+                    mongo.tasks.update_one(
+                        {"task_id": task_id},
+                        {"$set": {"params": params}}
+                    )
+                    logger.info(f"Synced inherited rule params to database for task {task_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to sync inherited params to DB for task {task_id}: {e}")
 
         logger.info(f"Processing task {task_id}: {url}")
         

@@ -355,7 +355,7 @@
               <el-form-item label="解析模式" v-if="form.params">
                 <el-radio-group v-model="form.params.parser" size="default">
                   <el-radio-button label="">不解析</el-radio-button>
-                  <el-radio-button label="gne">智能解析 (GAE)</el-radio-button>
+                  <el-radio-button label="gne">智能解析 (GNE)</el-radio-button>
                   <el-radio-button label="llm">大模型提取 (LLM)</el-radio-button>
                   <el-radio-button label="xpath">自定义规则 (XPath)</el-radio-button>
                 </el-radio-group>
@@ -363,7 +363,7 @@
 
               <div v-if="form.params && form.params.parser === 'gne'" class="parser-config-area">
                 <el-alert 
-                  title="GAE 详情模式" 
+                  title="GNE 智能解析" 
                   type="info" 
                   :closable="false" 
                   show-icon 
@@ -699,6 +699,88 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitting">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 任务详情对话框 -->
+    <el-dialog 
+      v-model="showTaskDialog" 
+      title="任务详情" 
+      width="900px" 
+      top="5vh"
+      destroy-on-close
+      class="detail-dialog"
+    >
+      <div v-if="currentTask" class="task-details">
+        <el-tabs v-model="activeDetailTab">
+          <el-tab-pane label="基本信息" name="info">
+            <el-descriptions :column="2" border size="default" class="detail-descriptions">
+              <el-descriptions-item label="任务 ID" :span="2">
+                <span class="id-text">{{ currentTask.task_id }}</span>
+              </el-descriptions-item>
+              
+              <el-descriptions-item label="目标 URL" :span="2">
+                <el-link :href="currentTask.url" target="_blank" type="primary">{{ currentTask.url }}</el-link>
+              </el-descriptions-item>
+
+              <el-descriptions-item label="执行状态">
+                <el-tag :type="getStatusColor(currentTask.status)">
+                  {{ formatStatus(currentTask.status) }}
+                </el-tag>
+              </el-descriptions-item>
+
+              <el-descriptions-item label="采集引擎">
+                <el-tag size="small" effect="plain">{{ currentTask.params?.engine || 'playwright' }}</el-tag>
+              </el-descriptions-item>
+
+              <el-descriptions-item>
+                <template #label>
+                  <div class="label-box"><el-icon><Share /></el-icon><span>代理信息</span></div>
+                </template>
+                <div class="value-content">
+                  <template v-if="currentTask.params?.proxy_pool_group">
+                    <el-tag type="success" size="default">池: {{ currentTask.params.proxy_pool_group }}</el-tag>
+                  </template>
+                  <template v-else-if="currentTask.params?.proxy?.server">
+                    <el-tooltip :content="currentTask.params.proxy.server" placement="top">
+                      <el-tag type="warning" size="default">固定代理</el-tag>
+                    </el-tooltip>
+                  </template>
+                  <span v-else class="empty-value">直连 (无代理)</span>
+                </div>
+              </el-descriptions-item>
+
+              <el-descriptions-item label="创建时间">
+                {{ formatDate(currentTask.created_at) }}
+              </el-descriptions-item>
+
+              <el-descriptions-item label="更新时间" v-if="currentTask.updated_at">
+                {{ formatDate(currentTask.updated_at) }}
+              </el-descriptions-item>
+            </el-descriptions>
+          </el-tab-pane>
+
+          <el-tab-pane label="采集参数" name="params">
+            <div class="code-container">
+              <pre class="pretty-json"><code>{{ JSON.stringify(currentTask.params, null, 2) }}</code></pre>
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="错误详情" name="error" v-if="currentTask.status === 'failed'">
+            <div class="error-info">
+              <el-alert
+                :title="currentTask.error?.message || '未知错误'"
+                type="error"
+                :closable="false"
+                show-icon
+              />
+              <div v-if="currentTask.error?.stack" class="stack-trace mt-4">
+                <div class="stack-label">堆栈信息:</div>
+                <pre class="stack-content"><code>{{ currentTask.error.stack }}</code></pre>
+              </div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -774,8 +856,6 @@ const form = ref({
     },
     parser: '',
     parser_config: {
-      mode: 'detail',
-      list_xpath: '',
       fields: ['title', 'content']
     },
     proxy: {
@@ -857,7 +937,6 @@ const applyMatchedRule = (rule, silent = false) => {
   // 确保 parser_config 对象存在
   if (!form.value.params.parser_config) {
     form.value.params.parser_config = {
-      mode: 'detail',
       fields: []
     }
   }
@@ -871,13 +950,12 @@ const applyMatchedRule = (rule, silent = false) => {
     const fields = rule.parser_config.fields || []
     selectedLlmFields.value = [...fields]
     form.value.params.parser_config.fields = [...fields]
-    form.value.params.parser_config.mode = rule.parser_config.mode || 'detail'
   } else if (rule.parser_type === 'xpath') {
     const rules = rule.parser_config.rules || {}
     xpathRules.value = Object.entries(rules).map(([field, path]) => ({ name: field, xpath: path }))
     form.value.params.parser_config.rules = { ...rules }
   } else if (rule.parser_type === 'gne') {
-    form.value.params.parser_config.mode = 'detail'
+    // GNE 不需要额外配置
   }
 
   // 应用浏览器特征和高级配置
@@ -1083,8 +1161,6 @@ const openCreateDialog = () => {
       },
       parser: '',
       parser_config: {
-        mode: 'detail',
-        list_xpath: '',
         fields: ['title', 'content']
       },
       proxy: {
@@ -1221,10 +1297,7 @@ const handleEdit = (row) => {
     }
     
     if (!form.value.params.parser_config) {
-      form.value.params.parser_config = { mode: 'detail', list_xpath: '', fields: ['title', 'content'] }
-    } else {
-      if (!form.value.params.parser_config.mode) form.value.params.parser_config.mode = 'detail'
-      if (form.value.params.parser_config.list_xpath === undefined) form.value.params.parser_config.list_xpath = ''
+      form.value.params.parser_config = { fields: ['title', 'content'] }
     }
     
     Object.keys(defaultParams).forEach(key => {
@@ -1306,7 +1379,7 @@ const handleSubmit = async () => {
       })
       submitData.params.parser_config = { rules }
     } else if (submitData.params.parser === 'gne') {
-      submitData.params.parser_config = { mode: 'detail' }
+      submitData.params.parser_config = {}
     } else {
       submitData.params.parser_config = null
     }

@@ -129,6 +129,24 @@ class DrissionManager:
             ua = (params.get("user_agent") if params else None) or settings.user_agent
             co.set_user_agent(ua)
             
+            # 设置代理
+            if params and params.get("proxy"):
+                proxy_config = params.get("proxy")
+                if isinstance(proxy_config, dict) and proxy_config.get("server"):
+                    server = proxy_config["server"]
+                    # DrissionPage 代理格式: 'http://user:pass@host:port'
+                    if proxy_config.get("username") and proxy_config.get("password"):
+                        user = proxy_config["username"]
+                        password = proxy_config["password"]
+                        if '://' in server:
+                            protocol, address = server.split('://', 1)
+                            server = f"{protocol}://{user}:{password}@{address}"
+                        else:
+                            server = f"http://{user}:{password}@{server}"
+                    
+                    co.set_proxy(server)
+                    logger.info(f"DrissionPage initialized with proxy: {server}")
+            
             self._page = ChromiumPage(co)
             return self._page
 
@@ -183,7 +201,7 @@ class DrissionManager:
     def last_used_time(self):
         return self._last_used_time
 
-    def create_tab(self, url: str = None, no_images: bool = False, no_css: bool = False):
+    def create_tab(self, url: str = None, no_images: bool = False, no_css: bool = False, proxy: dict = None, proxy_pool_group: str = None):
         """
         线程安全地创建一个新标签页
         
@@ -191,11 +209,25 @@ class DrissionManager:
             url: 初始 URL
             no_images: 是否禁用图片加载
             no_css: 是否禁用 CSS 加载
+            proxy: 手动代理配置
+            proxy_pool_group: 代理池分组
         """
         with self._lock:
+            # 如果提供了代理，且当前浏览器已启动，由于 DrissionPage 单例模式限制，
+            # 如果当前浏览器代理与请求代理不一致，可能需要重启浏览器。
+            # 这里采取简单策略：如果浏览器未启动，或者需要切换代理，则重新初始化。
+            
+            target_proxy = proxy
+            if not target_proxy and proxy_pool_group:
+                # 注意：这里在同步上下文中调用异步方法需要特殊处理
+                # 由于 get_random_proxy 是异步的，我们在 create_tab 中难以直接 await
+                # 建议在调用 create_tab 之前就已经解析好代理。
+                # 但为了兼容性，如果没解析，我们尝试在外部解析。
+                pass
+
             # 确保浏览器已初始化
             if not self._page:
-                self.get_browser()
+                self.get_browser({"proxy": target_proxy})
             
             # 更新最后使用时间，防止被空闲检查关闭
             self._last_used_time = time.time()

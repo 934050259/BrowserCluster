@@ -864,25 +864,44 @@
                   {{ currentTask.params?.stealth ? '开启' : '关闭' }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item :span="2">
+              <el-descriptions-item>
                 <template #label>
                   <div class="label-box"><el-icon><Box /></el-icon><span>存储位置</span></div>
                 </template>
                 <div class="storage-info-cell" v-if="currentTask.params?.storage_type">
                   <el-tag :type="currentTask.params?.storage_type === 'oss' ? 'warning' : 'info'" size="default">
-                  <div class="tag-content-flex">
-                    <el-icon><Collection v-if="currentTask.params.storage_type === 'mongo'" /><FolderOpened v-else /></el-icon>
-                    <span>{{ currentTask.params?.storage_type === 'oss' ? 'Aliyun OSS' : 'MongoDB' }}</span>
-                  </div>
-                </el-tag>
+                    <div class="tag-content-flex">
+                      <el-icon><Collection v-if="currentTask.params.storage_type === 'mongo'" /><FolderOpened v-else /></el-icon>
+                      <span>{{ currentTask.params?.storage_type === 'oss' ? 'Aliyun OSS' : 'MongoDB' }}</span>
+                    </div>
+                  </el-tag>
                   <code class="storage-path-code">
                     <template v-if="currentTask.params.storage_type === 'mongo'">
-                      集合: {{ currentTask.params.mongo_collection || 'tasks_results' }}
+                      {{ currentTask.params.mongo_collection || 'tasks_results' }}
                     </template>
                     <template v-else>
-                      路径: {{ currentTask.params.oss_path || 'tasks/' }}{{ currentTask.task_id }}/
+                      {{ currentTask.params.oss_path || 'tasks/' }}{{ currentTask.task_id }}/
                     </template>
                   </code>
+                </div>
+              </el-descriptions-item>
+              <el-descriptions-item>
+                <template #label>
+                  <div class="label-box"><el-icon><Share /></el-icon><span>代理信息</span></div>
+                </template>
+                <div class="value-content">
+                  <template v-if="currentTask.params?.proxy_pool_group">
+                    <el-tag type="success" size="default">池: {{ currentTask.params.proxy_pool_group }}</el-tag>
+                    <div v-if="currentTask.result?.metadata?.proxy" class="mt-1">
+                      <code class="text-xs text-gray-500">出口: {{ currentTask.result.metadata.proxy }}</code>
+                    </div>
+                  </template>
+                  <template v-else-if="currentTask.params?.proxy?.server">
+                    <el-tooltip :content="currentTask.params.proxy.server" placement="top">
+                      <el-tag type="warning" size="default">固定代理</el-tag>
+                    </el-tooltip>
+                  </template>
+                  <span v-else class="empty-value">直连 (无代理)</span>
                 </div>
               </el-descriptions-item>
               <el-descriptions-item>
@@ -912,7 +931,13 @@
                   <div class="label-box"><el-icon><Setting /></el-icon><span>解析模式</span></div>
                 </template>
                 <el-tag type="warning" size="default" v-if="currentTask.params?.parser === 'gne'">
-                  详情模式
+                  详情提取 (GNE)
+                </el-tag>
+                <el-tag type="success" size="default" v-else-if="currentTask.params?.parser === 'xpath'">
+                  模板解析 (XPath)
+                </el-tag>
+                <el-tag type="primary" size="default" v-else-if="currentTask.params?.parser === 'llm'">
+                  智能提取 (LLM)
                 </el-tag>
                 <span v-else>-</span>
               </el-descriptions-item>
@@ -934,6 +959,9 @@
                       {{ field }}
                     </el-tag>
                   </div>
+                </template>
+                <template v-else-if="currentTask.params.matched_rule">
+                  <el-tag type="info" size="small">规则域名: {{ currentTask.params.matched_rule }}</el-tag>
                 </template>
                 <span v-else>自动识别</span>
               </el-descriptions-item>
@@ -1092,7 +1120,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onActivated } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Delete, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right, Document, UploadFilled, MagicStick, Warning, ArrowDown, RefreshRight } from '@element-plus/icons-vue'
@@ -1198,7 +1226,6 @@ const applyMatchedRule = (rule, silent = false) => {
   // 确保 parser_config 对象存在
   if (!scrapeForm.value.params.parser_config) {
     scrapeForm.value.params.parser_config = {
-      mode: 'detail',
       fields: []
     }
   }
@@ -1212,14 +1239,13 @@ const applyMatchedRule = (rule, silent = false) => {
     const fields = rule.parser_config.fields || []
     selectedLlmFields.value = [...fields]
     scrapeForm.value.params.parser_config.fields = [...fields]
-    scrapeForm.value.params.parser_config.mode = rule.parser_config.mode || 'detail'
   } else if (rule.parser_type === 'xpath') {
     const rules = rule.parser_config.rules || {}
     xpathRules.value = Object.entries(rules).map(([field, path]) => ({ field, path }))
     scrapeForm.value.params.parser_config.rules = { ...rules }
   } else if (rule.parser_type === 'gne') {
-    scrapeForm.value.params.parser_config.mode = 'detail'
-  }
+      // GNE 不需要额外配置
+    }
 
   // 应用浏览器特征和高级配置
   const syncFields = [
@@ -1408,7 +1434,6 @@ const scrapeForm = ref({
       save_html: true,
   parser: '',
   parser_config: {
-    mode: 'detail',
     fields: ['title', 'content']
   },
   intercept_apis: [],
@@ -1611,7 +1636,7 @@ const fillFormFromTask = (row) => {
     oss_path: params.oss_path || '',
     save_html: params.save_html !== undefined ? params.save_html : true,
     parser: params.parser || '',
-    parser_config: params.parser_config || { mode: 'detail', fields: ['title', 'content'] },
+    parser_config: params.parser_config || { fields: ['title', 'content'] },
     intercept_apis: params.intercept_apis || [],
     intercept_continue: params.intercept_continue || false
   }
@@ -1755,7 +1780,7 @@ const submitTask = async () => {
         })
         data.params.parser_config = { rules }
       } else if (data.params.parser === 'gne') {
-        data.params.parser_config = { mode: 'detail' }
+        data.params.parser_config = {}
       } else {
         data.params.parser_config = null
       }
@@ -1871,7 +1896,7 @@ const resetForm = () => {
       },
       cookies: '',
       parser: '',
-      parser_config: { mode: 'detail', fields: ['title', 'content'] },
+      parser_config: { fields: ['title', 'content'] },
       stealth: true,
       storage_type: 'mongo',
       save_html: true,
@@ -1936,6 +1961,11 @@ watch(() => route.path, (newPath) => {
     loadTasks()
     loadProxyGroups()
   }
+})
+
+onActivated(() => {
+  loadTasks()
+  loadProxyGroups()
 })
 
 onMounted(() => {
