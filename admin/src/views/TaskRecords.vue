@@ -820,7 +820,7 @@ watch(scheduleId, (newId) => {
     loadTasks()
     loadScheduleInfo()
   }
-}, { immediate: true })
+})
 </script>
 
 <style scoped>

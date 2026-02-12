@@ -109,7 +109,9 @@ async def ai_generate_rules(request: AiRuleGenerationRequest, current_user: dict
             url=str(request.url),
             wait_for_selector=request.wait_for_selector,
             wait_time=request.wait_time,
-            timeout=request.timeout // 1000  # Convert ms to seconds
+            timeout=request.timeout // 1000,  # Convert ms to seconds
+            proxy=request.proxy,
+            proxy_pool_group=request.proxy_pool_group
         )
         
         if not html:

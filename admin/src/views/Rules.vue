@@ -522,6 +522,15 @@
                     :disabled="!!form.proxy_pool_group"
                   />
                   <div class="input-tip" v-if="form.proxy_pool_group">使用代理池时无法手动配置代理</div>
+                  <el-alert
+                    v-if="form.engine === 'drissionpage' && form.proxy.server && form.proxy.server.includes('@')"
+                    title="格式错误"
+                    type="error"
+                    description="DrissionPage 引擎不支持在 URL 中包含账密的代理格式。请移除账密信息，或切换至 Playwright 引擎。"
+                    show-icon
+                    :closable="false"
+                    class="mt-2"
+                  />
                 </el-form-item>
                 
                 <template v-if="form.proxy.server && !form.proxy_pool_group">
@@ -537,12 +546,12 @@
                       </el-form-item>
                     </el-col>
                   </el-row>
-                  
+
                   <el-alert
                     v-if="form.engine === 'drissionpage'"
-                    title="代理说明"
-                    type="info"
-                    description="DrissionPage 引擎目前仅支持无账密代理（IP:Port 格式）。如需使用账密认证代理，请切换至 Playwright 引擎。"
+                    title="代理限制"
+                    type="warning"
+                    description="DrissionPage 引擎目前仅支持无账密代理（IP:Port 格式）。如果代理需要账密认证，可能会导致抓取失败。建议切换至 Playwright 引擎。"
                     show-icon
                     :closable="false"
                     class="proxy-warning"
@@ -691,9 +700,9 @@ const form = reactive({
   description: '',
   is_active: true,
   priority: 5,
-  retry_enabled: true,
-  max_retries: 3
-})
+    retry_enabled: false,
+    max_retries: 0
+  })
 
 const formRules = {
   domain: [{ required: true, message: '请输入目标域名', trigger: 'blur' }],
@@ -759,8 +768,8 @@ const handleAdd = () => {
     description: '',
     is_active: true,
     priority: 5,
-    retry_enabled: true,
-    max_retries: 3
+    retry_enabled: false,
+    max_retries: 0
   })
   selectedLlmFields.value = ['title', 'content']
   form.parser_config = { fields: ['title', 'content'] }

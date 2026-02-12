@@ -81,7 +81,7 @@
                 :loading="runningScrapers.has(row._id)"
                 icon="VideoPlay"
               >
-                {{ runningScrapers.has(row._id) ? '正在执行' : '执行' }}
+                {{ runningScrapers.has(row._id) ? '正在测试' : '测试' }}
               </el-button>
               <el-button 
                 type="info" 
@@ -530,6 +530,15 @@
                     />
                   </el-select>
                   <div class="input-tip">选择代理池分组，抓取时将自动从该组中选择随机代理。使用代理池时，手动代理设置将失效。</div>
+                  <el-alert
+                    v-if="form.params.engine === 'drissionpage' && form.params.proxy_pool_group"
+                    title="引擎限制"
+                    type="warning"
+                    description="DrissionPage 引擎目前仅支持无账密代理。请确保所选代理池分组中不包含需要账密认证的代理，否则可能会导致抓取失败。"
+                    show-icon
+                    :closable="false"
+                    class="mt-2"
+                  />
                 </el-form-item>
 
                 <el-form-item label="手动代理服务器">
@@ -540,6 +549,15 @@
                     :disabled="!!form.params.proxy_pool_group"
                   />
                   <div class="input-tip" v-if="form.params.proxy_pool_group">使用代理池时无法手动配置代理</div>
+                  <el-alert
+                    v-if="form.params.engine === 'drissionpage' && form.params.proxy.server && form.params.proxy.server.includes('@')"
+                    title="格式错误"
+                    type="error"
+                    description="DrissionPage 引擎不支持在 URL 中包含账密的代理格式。请移除账密信息，或切换至 Playwright 引擎。"
+                    show-icon
+                    :closable="false"
+                    class="mt-2"
+                  />
                 </el-form-item>
                 
                 <template v-if="!form.params.proxy_pool_group && form.params.proxy.server">
@@ -555,6 +573,16 @@
                       </el-form-item>
                     </el-col>
                   </el-row>
+
+                  <el-alert
+                    v-if="form.params.engine === 'drissionpage'"
+                    title="代理限制"
+                    type="warning"
+                    description="DrissionPage 引擎暂不支持账密认证代理。如果代理需要用户名和密码，可能会导致请求失败。建议使用无账密代理或切换至 Playwright 引擎。"
+                    show-icon
+                    :closable="false"
+                    class="mt-2"
+                  />
                 </template>
 
                 <div class="section-header mt-4">
@@ -1030,9 +1058,9 @@ const handleRun = async (row) => {
         saveRunningStatus()
         
         await runScraper(row._id)
-        ElMessage.success(`任务 "${row.name}" 已提交执行`)
+        ElMessage.success(`测试任务 "${row.name}" 已提交`)
         
-        // 提交成功后保持 5 秒的“正在执行”状态，给用户明确反馈
+        // 提交成功后保持 5 秒的“正在测试”状态，给用户明确反馈
         setTimeout(() => {
             runningScrapers.value.delete(row._id)
             saveRunningStatus()
@@ -1040,7 +1068,14 @@ const handleRun = async (row) => {
     } catch (error) {
         runningScrapers.value.delete(row._id)
         saveRunningStatus()
-        ElMessage.error(error.response?.data?.detail || '执行失败')
+        
+        const errorMsg = error.response?.data?.detail || error.message || '测试任务提交失败'
+        
+        ElMessageBox.alert(errorMsg, '测试失败', {
+            confirmButtonText: '确定',
+            type: 'error',
+            customClass: 'error-message-box'
+        })
     }
 }
 
@@ -1470,8 +1505,8 @@ const form = reactive({
     time_xpath: '',
     pagination_next_xpath: '',
     max_pages: 5,
-    retry_enabled: true,
-    max_retries: 3,
+    retry_enabled: false,
+    max_retries: 0,
     params: {
         engine: 'playwright',
         wait_for: 'networkidle',
@@ -1543,8 +1578,10 @@ const handleAdd = async () => {
     isEdit.value = false
     activeTab.value = 'basic'
     
-    // 确保在打开弹窗前，规则列表是最新的
-    await fetchRules()
+    // 如果规则列表为空，则获取
+    if (rules.value.length === 0) {
+        await fetchRules()
+    }
     
     // 初始化表单默认值
     Object.assign(form, {
@@ -1558,8 +1595,8 @@ const handleAdd = async () => {
         time_xpath: '',
         pagination_next_xpath: '',
         max_pages: 5,
-        retry_enabled: true,
-        max_retries: 3,
+        retry_enabled: false,
+        max_retries: 0,
         params: {
             engine: 'playwright',
             wait_for: 'networkidle',
@@ -1712,6 +1749,12 @@ const submitForm = async () => {
             try {
                 // Remove empty optional fields
                 const data = JSON.parse(JSON.stringify(form))
+                
+                // 确保重试逻辑一致：如果关闭了重试开关，则重试次数强制为 0
+                if (data.retry_enabled === false) {
+                    data.max_retries = 0
+                }
+                
                 if (!data.rule_id) delete data.rule_id
                 if (!data.time_xpath) delete data.time_xpath
                 if (!data.pagination_next_xpath) delete data.pagination_next_xpath
@@ -1876,7 +1919,15 @@ const handleTest = async (fromAi = false) => {
         ElMessage.success(`校验成功，提取到 ${res.items.length} 条数据`)
     } catch (error) {
         console.error('testScraper error:', error);
-        ElMessage.error(error.response?.data?.detail || '校验失败')
+        
+        const errorMsg = error.response?.data?.detail || error.message || '规则校验失败'
+        
+        ElMessageBox.alert(errorMsg, '测试失败', {
+            confirmButtonText: '确定',
+            type: 'error',
+            customClass: 'error-message-box'
+        })
+        
         // 如果校验失败且是从 AI 生成过来的，可能需要关闭弹窗让用户重试
         if (isActuallyAi) {
             testResultVisible.value = false
@@ -1918,13 +1969,12 @@ const handleIframeMessage = (event) => {
 }
 
 onMounted(() => {
-    fetchData()
-    loadProxyGroups()
     window.addEventListener('message', handleIframeMessage)
 })
 
 onActivated(() => {
     fetchData()
+    loadProxyGroups()
 })
 
 onUnmounted(() => {

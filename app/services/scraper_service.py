@@ -53,7 +53,7 @@ async def execute_scraper_task(scraper_doc: dict):
         
         scraper = Scraper()
         
-        # 0. 获取规则信息（如果关联了规则，或者根据域名自动匹配）
+        # 0. 获取规则信息（仅用于详情页采集任务的继承）
         rule_id = scraper_doc.get("rule_id")
         rule_doc = None
         if rule_id:
@@ -69,36 +69,43 @@ async def execute_scraper_task(scraper_doc: dict):
             except Exception as e:
                 logger.warning(f"Failed to fetch rule {rule_id}: {e}")
         
-        # 如果没有明确关联规则，尝试根据 URL 域名自动匹配
+        # 如果没有明确关联规则，尝试根据 URL 域名自动匹配（仅用于详情页任务）
         if not rule_doc:
             rule_doc = _match_rule_by_url(scraper_doc["url"])
             if rule_doc:
-                logger.info(f"Automatically matched rule {rule_doc.get('domain')} for scraper {scraper_name}")
+                logger.info(f"Automatically matched rule {rule_doc.get('domain')} for detail tasks of scraper {scraper_name}")
         
         # 1. 抓取列表页并提取项
         params_config = scraper_doc.get("params", {})
         
-        # 提取代理配置 (优先级: scraper > rule)
-        proxy_pool_group = scraper_doc.get("proxy_pool_group") or params_config.get("proxy_pool_group")
-        proxy = scraper_doc.get("proxy") or params_config.get("proxy")
+        # 提取列表页代理配置 (列表页采集应仅使用站点任务自身配置的代理，不从规则继承)
+        list_proxy_pool_group = scraper_doc.get("proxy_pool_group") or params_config.get("proxy_pool_group")
+        list_proxy = scraper_doc.get("proxy") or params_config.get("proxy")
         
         # 统一处理空字符串和空对象
-        if not proxy_pool_group:
-            proxy_pool_group = None
-        if proxy and not proxy.get("server"):
-            proxy = None
+        if not list_proxy_pool_group:
+            list_proxy_pool_group = None
+        if list_proxy and not list_proxy.get("server"):
+            list_proxy = None
+            
+        # 2. 详情页代理逻辑：如果 scraper 本身没设代理，尝试从关联规则中继承
+        # 注意：这里我们单独定义 detail_proxy，确保与 list_proxy 隔离
+        detail_proxy_pool_group = list_proxy_pool_group
+        detail_proxy = list_proxy
         
-        # 如果 scraper 本身没设代理，尝试从关联规则中继承
-        if not proxy_pool_group and not proxy:
+        if not detail_proxy_pool_group and not detail_proxy:
             if rule_doc:
-                proxy_pool_group = rule_doc.get("proxy_pool_group")
-                proxy = rule_doc.get("proxy")
+                detail_proxy_pool_group = rule_doc.get("proxy_pool_group")
+                detail_proxy = rule_doc.get("proxy")
                 
-                # 再次处理从规则中继承的可能为空的值
-                if not proxy_pool_group:
-                    proxy_pool_group = None
-                if proxy and not proxy.get("server"):
-                    proxy = None
+                # 处理从规则中继承的可能为空的值
+                if not detail_proxy_pool_group:
+                    detail_proxy_pool_group = None
+                if detail_proxy and not detail_proxy.get("server"):
+                    detail_proxy = None
+                
+                if detail_proxy_pool_group or detail_proxy:
+                    logger.info(f"Detail tasks will inherit proxy from rule {rule_doc.get('domain')}: group={detail_proxy_pool_group}")
         
         # 兼容旧数据，如果 params 为空则从顶级获取
         def get_val(key, default=None):
@@ -122,13 +129,13 @@ async def execute_scraper_task(scraper_doc: dict):
                 "no_css": get_val("no_css", True),
                 "block_images": get_val("block_images", False),
                 "block_media": get_val("block_media", False),
-                "proxy": proxy,
-                "proxy_pool_group": proxy_pool_group,
+                "proxy": list_proxy,
+                "proxy_pool_group": list_proxy_pool_group,
                 "cookies": get_val("cookies"),
                 "intercept_apis": get_val("intercept_apis"),
                 "intercept_continue": get_val("intercept_continue", False),
                 "max_pages": scraper_doc.get("max_pages", 1),
-                "max_retries": scraper_doc.get("max_retries", 2),
+                "max_retries": scraper_doc.get("max_retries", 0),
                 "pagination_next_xpath": scraper_doc.get("pagination_next_xpath")
             }
         )
@@ -158,8 +165,8 @@ async def execute_scraper_task(scraper_doc: dict):
                 block_images=get_val("block_images", get_val("no_images", True)),
                 block_media=get_val("block_media", False),
                 user_agent=get_val("user_agent"),
-                proxy=proxy,
-                proxy_pool_group=proxy_pool_group,
+                proxy=detail_proxy,
+                proxy_pool_group=detail_proxy_pool_group,
                 cookies=get_val("cookies"),
                 intercept_apis=get_val("intercept_apis"),
                 intercept_continue=get_val("intercept_continue", False),
@@ -169,7 +176,7 @@ async def execute_scraper_task(scraper_doc: dict):
                 save_html=get_val("save_html", True),
                 screenshot=get_val("screenshot", False),
                 is_fullscreen=get_val("is_fullscreen", False),
-                max_retries=get_val("max_retries", 2)
+                max_retries=get_val("max_retries", 0)
             )
 
             if rule_doc:

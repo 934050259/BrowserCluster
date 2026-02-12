@@ -55,7 +55,8 @@ class ScraperBase(BaseModel):
     screenshot: bool = Field(False, description="是否截图")
     is_fullscreen: bool = Field(False, description="是否全屏截图")
     
-    max_retries: int = Field(2, ge=0, description="列表加载失败重试次数")
+    max_retries: int = Field(0, ge=0, description="列表加载失败重试次数")
+    retry_enabled: bool = Field(True, description="是否启用重试")
     
     # 定时设置
     cron: Optional[str] = Field(None, description="Cron 表达式 (例如: 0 0 * * *)")
@@ -99,7 +100,7 @@ class ScraperTestRequest(BaseModel):
     block_images: bool = True
     no_css: bool = True
     stealth: bool = True
-    max_retries: int = 2
+    max_retries: int = 0
     proxy: Optional[Dict[str, Any]] = None
     proxy_pool_group: Optional[str] = None
     cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None

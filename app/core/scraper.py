@@ -309,12 +309,19 @@ class Scraper:
             engine = params.get("engine") or settings.browser_engine
             
             # 增加重试机制，如果页面没加载出来，多等一会儿
-            max_retries = params.get("max_retries", 2)
+            max_retries = params.get("max_retries", 0)
             for retry in range(max_retries + 1):
                 if engine == "drissionpage":
+                    # 如果是重试，增加等待时间
+                    current_wait_time = params.get("wait_time", 3000)
+                    if retry > 0:
+                        current_wait_time += (retry * 2000)
+                        logger.info(f"Retry {retry} for page {page_num} (DrissionPage), increasing wait_time to {current_wait_time}ms")
+
                     html_content = await self.validate_rules_with_drission(
                         url=current_url,
                         wait_for_selector=params.get("wait_for_selector"),
+                        wait_time=current_wait_time,
                         timeout=int((params.get("wait_timeout") or 30000) / 1000),
                         no_images=params.get("no_images", True),
                         no_css=params.get("no_css", True),
@@ -1007,8 +1014,8 @@ class Scraper:
         proxy_pool_group: str = None
     ) -> str:
         """
-        使用 DrissionPage 验证抓取规则 (获取渲染后的 HTML)
-        独立函数，确保资源正确管理和冲突处理
+        使用 DrissionPage 获取渲染后的 HTML
+        主要用于规则验证和列表页抓取
         """
         # 如果提供了代理池但没提供具体代理，先异步获取一个代理
         if not proxy and proxy_pool_group:
@@ -1019,7 +1026,7 @@ class Scraper:
                     "username": pool_proxy.username,
                     "password": pool_proxy.password
                 }
-                logger.info(f"Using proxy from pool group '{proxy_pool_group}' for DrissionPage validation: {pool_proxy.server}")
+                logger.info(f"Using proxy from pool group '{proxy_pool_group}' for DrissionPage fetch: {pool_proxy.server}")
 
         return await asyncio.to_thread(
             self._sync_validate_with_drission,
@@ -1044,7 +1051,7 @@ class Scraper:
         proxy: dict = None,
         proxy_pool_group: str = None
     ) -> str:
-        """同步执行 DrissionPage 验证"""
+        """同步执行 DrissionPage 获取页面内容"""
         tab = None
         try:
             # 使用线程安全的方法创建标签页
@@ -1067,12 +1074,12 @@ class Scraper:
             
             # 简单的 Cloudflare 检查
             if "checking your browser" in tab.title.lower() or "just a moment" in tab.title.lower():
-                logger.info("Encountered Cloudflare challenge in validation, waiting...")
+                logger.info("Encountered Cloudflare challenge, waiting...")
                 time.sleep(5)
             
-            # 额外等待页面加载完成（确保 AI 分析的是完整内容）
+            # 额外等待页面加载完成
             if wait_time > 0:
-                logger.info(f"AI rule generation: extra waiting {wait_time}ms for page full load...")
+                logger.info(f"Extra waiting {wait_time}ms for page full load...")
                 time.sleep(wait_time / 1000)
             
             return tab.html
