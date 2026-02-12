@@ -999,6 +999,7 @@ class Scraper:
         self,
         url: str,
         wait_for_selector: str = None,
+        wait_time: int = 3000,
         timeout: int = 30,
         no_images: bool = False,
         no_css: bool = False,
@@ -1024,6 +1025,7 @@ class Scraper:
             self._sync_validate_with_drission,
             url,
             wait_for_selector,
+            wait_time,
             timeout,
             no_images,
             no_css,
@@ -1035,6 +1037,7 @@ class Scraper:
         self,
         url: str,
         wait_for_selector: str = None,
+        wait_time: int = 3000,
         timeout: int = 30,
         no_images: bool = False,
         no_css: bool = False,
@@ -1066,6 +1069,11 @@ class Scraper:
             if "checking your browser" in tab.title.lower() or "just a moment" in tab.title.lower():
                 logger.info("Encountered Cloudflare challenge in validation, waiting...")
                 time.sleep(5)
+            
+            # 额外等待页面加载完成（确保 AI 分析的是完整内容）
+            if wait_time > 0:
+                logger.info(f"AI rule generation: extra waiting {wait_time}ms for page full load...")
+                time.sleep(wait_time / 1000)
             
             return tab.html
             

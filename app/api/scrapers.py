@@ -108,6 +108,7 @@ async def ai_generate_rules(request: AiRuleGenerationRequest, current_user: dict
         html = await scraper.validate_rules_with_drission(
             url=str(request.url),
             wait_for_selector=request.wait_for_selector,
+            wait_time=request.wait_time,
             timeout=request.timeout // 1000  # Convert ms to seconds
         )
         

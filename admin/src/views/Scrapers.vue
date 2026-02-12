@@ -135,15 +135,15 @@
                   <div class="section-title">任务信息</div>
                 </div>
                 
-                <el-form-item label="任务名称" prop="name">
-                  <el-input v-model="form.name" placeholder="请输入采集任务名称，如：新闻列表抓取" clearable>
-                    <template #prefix><el-icon><InfoFilled /></el-icon></template>
-                  </el-input>
-                </el-form-item>
-
                 <el-form-item label="起始 URL" prop="url">
                   <el-input v-model="form.url" placeholder="请输入列表页抓取地址，如: https://news.example.com/list" clearable>
                     <template #prefix><el-icon class="icon-link"><Connection /></el-icon></template>
+                  </el-input>
+                </el-form-item>
+
+                <el-form-item label="任务名称" prop="name">
+                  <el-input v-model="form.name" placeholder="请输入采集任务名称，如：新闻列表抓取" clearable>
+                    <template #prefix><el-icon><InfoFilled /></el-icon></template>
                   </el-input>
                 </el-form-item>
 
@@ -682,7 +682,7 @@
       class="test-result-dialog"
       destroy-on-close
     >
-      <div class="test-layout">
+      <div class="test-layout" v-loading="testing" element-loading-text="正在执行规则校验，请稍候...">
         <!-- 左侧：XPath 调试面板 -->
         <div class="test-sidebar">
           <div class="sidebar-header">
@@ -697,6 +697,10 @@
               <el-link :href="form.url" target="_blank" type="info" class="url-text">
                 <el-icon><Link /></el-icon> {{ form.url }}
               </el-link>
+            </div>
+            <div class="name-edit-box mt-3">
+              <div class="input-label mb-1" style="font-size: 12px; color: #64748b;">任务名称 (保存必填)</div>
+              <el-input v-model="form.name" size="small" placeholder="请输入采集任务名称" clearable />
             </div>
           </div>
           
@@ -1493,7 +1497,7 @@ const form = reactive({
         is_fullscreen: false,
     },
     cache: {
-        enabled: true,
+        enabled: false,
         ttl: 3600
     },
     enabled_schedule: false,
@@ -1538,6 +1542,8 @@ const formatTime = (time) => {
 const handleAdd = () => {
     isEdit.value = false
     activeTab.value = 'basic'
+    
+    // 初始化表单默认值
     Object.assign(form, {
         name: '',
         url: '',
@@ -1560,9 +1566,8 @@ const handleAdd = () => {
             user_agent: '',
             viewport: { width: 1920, height: 1080 },
             stealth: true,
-            no_images: true,
             no_css: true,
-            block_images: false,
+            block_images: true,
             block_media: false,
             proxy: { server: '', username: '', password: '' },
             proxy_pool_group: '',
@@ -1577,7 +1582,7 @@ const handleAdd = () => {
             is_fullscreen: false,
         },
         cache: {
-            enabled: true,
+            enabled: false,
             ttl: 3600
         },
         enabled_schedule: false,
@@ -1599,50 +1604,63 @@ const handleEdit = async (row) => {
     activeTab.value = 'basic'
     
     // 基础赋值
-    Object.assign(form, JSON.parse(JSON.stringify(row)))
+    const rowData = JSON.parse(JSON.stringify(row))
+    Object.assign(form, rowData)
     
-    // 确保嵌套对象存在且有默认值
+    // 确保 params 存在且所有必要字段都有默认值
     if (!form.params) {
-        form.params = {
-            engine: row.engine || 'playwright',
-            wait_for: row.wait_for || 'networkidle',
-            wait_time: row.wait_time !== undefined ? row.wait_time : 3000,
-            timeout: row.wait_timeout || 30000,
-            wait_for_selector: row.wait_for_selector || '',
-            user_agent: row.user_agent || '',
-            viewport: row.viewport || { width: 1920, height: 1080 },
-            stealth: row.stealth !== undefined ? row.stealth : true,
-            no_css: row.no_css !== undefined ? row.no_css : true,
-            block_images: row.block_images !== undefined ? row.block_images : (row.no_images !== undefined ? row.no_images : true),
-            block_media: row.block_media || false,
-            proxy: row.proxy || { server: '', username: '', password: '' },
-            proxy_pool_group: row.proxy_pool_group || '',
-            cookies: row.cookies || '',
-            intercept_apis: row.intercept_apis || [],
-            intercept_continue: row.intercept_continue || false,
-            storage_type: row.storage_type || 'mongo',
-            mongo_collection: row.mongo_collection || '',
-            oss_path: row.oss_path || '',
-            save_html: row.save_html !== undefined ? row.save_html : true,
-            screenshot: row.screenshot || false,
-            is_fullscreen: row.is_fullscreen || false,
-        }
-    } else {
-        // 如果 params 存在，但 viewport 不存在，需要补齐
-        if (!form.params.viewport) {
-            form.params.viewport = row.viewport || { width: 1920, height: 1080 }
-        }
-        // 同样确保 proxy 存在
-        if (!form.params.proxy) {
-            form.params.proxy = row.proxy || { server: '', username: '', password: '' }
-        }
+        form.params = {}
+    }
+
+    // 统一补齐 params 内部字段
+    const defaultParams = {
+        engine: 'playwright',
+        wait_for: 'networkidle',
+        wait_time: 3000,
+        timeout: 30000,
+        wait_for_selector: '',
+        user_agent: '',
+        viewport: { width: 1920, height: 1080 },
+        stealth: true,
+        no_css: true,
+        block_images: true,
+        block_media: false,
+        proxy: { server: '', username: '', password: '' },
+        proxy_pool_group: '',
+        cookies: '',
+        intercept_apis: [],
+        intercept_continue: false,
+        storage_type: 'mongo',
+        mongo_collection: '',
+        oss_path: '',
+        save_html: true,
+        screenshot: false,
+        is_fullscreen: false,
+    }
+
+    // 合并默认参数和现有参数
+    // 注意：优先使用 row 中的顶级字段（如果存在旧数据格式）
+    form.params = {
+        ...defaultParams,
+        ...form.params,
+        // 兼容旧数据格式：如果 params 中没有，但 row 中有，则使用 row 中的
+        engine: form.params.engine || row.engine || defaultParams.engine,
+        wait_for: form.params.wait_for || row.wait_for || defaultParams.wait_for,
+        wait_time: form.params.wait_time !== undefined ? form.params.wait_time : (row.wait_time !== undefined ? row.wait_time : defaultParams.wait_time),
+        timeout: form.params.timeout || row.wait_timeout || row.timeout || defaultParams.timeout,
+        wait_for_selector: form.params.wait_for_selector || row.wait_for_selector || defaultParams.wait_for_selector,
+        user_agent: form.params.user_agent || row.user_agent || defaultParams.user_agent,
+        viewport: form.params.viewport || row.viewport || defaultParams.viewport,
+        stealth: form.params.stealth !== undefined ? form.params.stealth : (row.stealth !== undefined ? row.stealth : defaultParams.stealth),
+        no_css: form.params.no_css !== undefined ? form.params.no_css : (row.no_css !== undefined ? row.no_css : defaultParams.no_css),
+        block_images: form.params.block_images !== undefined ? form.params.block_images : (row.block_images !== undefined ? row.block_images : (row.no_images !== undefined ? row.no_images : defaultParams.block_images)),
     }
 
     if (!form.cache) {
         form.cache = row.cache || { enabled: true, ttl: 3600 }
     }
     
-    // 补齐缺失的字段
+    // 补齐缺失的顶级字段
     if (form.retry_enabled === undefined) form.retry_enabled = true
     if (form.max_retries === undefined) form.max_retries = 3
     
@@ -1675,6 +1693,15 @@ const handleDelete = (row) => {
 }
 
 const submitForm = async () => {
+    // 如果是从校验弹窗点击的“保存并关闭”，需要先将 testForm 的规则同步回 form
+    if (testResultVisible.value) {
+        form.list_xpath = testForm.list_xpath
+        form.title_xpath = testForm.title_xpath
+        form.link_xpath = testForm.link_xpath
+        form.time_xpath = testForm.time_xpath
+        form.pagination_next_xpath = testForm.pagination_next_xpath
+    }
+
     if (!formRef.value) return
     await formRef.value.validate(async (valid) => {
         if (valid) {
@@ -1696,7 +1723,7 @@ const submitForm = async () => {
                     ElMessage.success('保存成功')
                 }
                 
-                // 如果当前正在校验规则，只关闭校验弹窗，保留主弹窗
+                // 如果当前正在校验规则，只关闭校验弹窗，返回主编辑界面
                 if (testResultVisible.value) {
                     testResultVisible.value = false
                 } else {
@@ -1710,6 +1737,11 @@ const submitForm = async () => {
             } finally {
                 submitting.value = false
             }
+        } else {
+            // 如果校验失败且校验弹窗打开着，提示用户切换回基础页签检查必填项
+            if (testResultVisible.value) {
+                ElMessage.error('保存失败，请检查基础配置中的必填项是否填写正确')
+            }
         }
     })
 }
@@ -1720,11 +1752,22 @@ const handleAiGenerate = async () => {
         return
     }
 
+    // 如果任务名称为空，自动根据 URL 生成一个默认名称
+    if (!form.name) {
+        try {
+            const urlObj = new URL(form.url)
+            form.name = `AI采集_${urlObj.hostname.replace('www.', '')}_${new Date().getTime().toString().slice(-4)}`
+        } catch (e) {
+            form.name = `AI采集任务_${new Date().getTime().toString().slice(-4)}`
+        }
+    }
+
     aiGenerating.value = true
     try {
         const res = await aiGenerateRules({
             url: form.url,
             wait_for_selector: form.params.wait_for_selector,
+            wait_time: form.params.wait_time,
             timeout: form.params.timeout,
             proxy: form.params.proxy,
             proxy_pool_group: form.params.proxy_pool_group,
@@ -1739,7 +1782,12 @@ const handleAiGenerate = async () => {
         testForm.pagination_next_xpath = res.pagination_next_xpath || ''
         
         isAiPreview.value = true
-        ElMessage.success('AI 规则生成成功，请在预览界面校验并确认')
+        
+        // 清空旧的校验结果，准备展示新规则的校验
+        testResults.items = []
+        testResults.html = ''
+        
+        ElMessage.success('AI 规则生成成功，正在启动预览校验...')
         
         // 生成成功后，直接调用校验，传入 true 表示来自 AI
         await handleTest(true)
@@ -1811,19 +1859,25 @@ const handleTest = async (fromAi = false) => {
 
     console.log('Current testForm state:', JSON.parse(JSON.stringify(testForm)));
     console.log('Sending testScraper request with payload:', payload);
-
+    
+    // 开启校验弹窗并进入加载状态
+    testResultVisible.value = true
     testing.value = true
+    
     try {
         const res = await testScraper(payload)
         testResults.items = res.items
         testResults.html = res.html
-        testResultVisible.value = true
         htmlViewMode.value = 'render' 
         activeXPathField.value = ['list', 'title']
         ElMessage.success(`校验成功，提取到 ${res.items.length} 条数据`)
     } catch (error) {
         console.error('testScraper error:', error);
         ElMessage.error(error.response?.data?.detail || '校验失败')
+        // 如果校验失败且是从 AI 生成过来的，可能需要关闭弹窗让用户重试
+        if (isActuallyAi) {
+            testResultVisible.value = false
+        }
     } finally {
         testing.value = false
     }

@@ -107,6 +107,7 @@ class ScraperTestRequest(BaseModel):
 class AiRuleGenerationRequest(BaseModel):
     url: HttpUrl
     wait_for_selector: Optional[str] = None
+    wait_time: int = 3000  # 默认额外等待 3 秒
     timeout: int = 30000
     proxy: Optional[Dict[str, Any]] = None
     proxy_pool_group: Optional[str] = None
