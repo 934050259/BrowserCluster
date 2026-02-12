@@ -1627,6 +1627,15 @@ const handleEdit = async (row) => {
             screenshot: row.screenshot || false,
             is_fullscreen: row.is_fullscreen || false,
         }
+    } else {
+        // 如果 params 存在，但 viewport 不存在，需要补齐
+        if (!form.params.viewport) {
+            form.params.viewport = row.viewport || { width: 1920, height: 1080 }
+        }
+        // 同样确保 proxy 存在
+        if (!form.params.proxy) {
+            form.params.proxy = row.proxy || { server: '', username: '', password: '' }
+        }
     }
 
     if (!form.cache) {
