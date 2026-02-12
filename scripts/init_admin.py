@@ -19,6 +19,7 @@ def init_admin():
     
     username = "admin"
     password = "admin"
+    password_hash = get_password_hash(password)
     
     logger.info(f"正在检查管理员账号: {username}")
     
