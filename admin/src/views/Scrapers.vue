@@ -1786,19 +1786,24 @@ const submitForm = async () => {
                     await updateScraper(form._id, data)
                     ElMessage.success('保存成功')
                 } else {
-                    await createScraper(data)
+                    const res = await createScraper(data)
+                    if (res && res._id) {
+                        form._id = res._id
+                        isEdit.value = true
+                    }
                     ElMessage.success('保存成功')
                 }
                 
-                // 如果当前正在校验规则，只关闭校验弹窗，返回主编辑界面
+                // 成功保存后，刷新列表
+                fetchData()
+                
+                // 如果是从预览校验界面保存的，只关闭预览弹窗，保留主配置界面
                 if (testResultVisible.value) {
                     testResultVisible.value = false
                 } else {
-                    // 如果是在主弹窗点击保存，则关闭主弹窗
+                    // 如果是在主配置界面点击的保存，则关闭主弹窗
                     dialogVisible.value = false
                 }
-                
-                fetchData()
             } catch (error) {
                 ElMessage.error(error.response?.data?.detail || '提交失败')
             } finally {
