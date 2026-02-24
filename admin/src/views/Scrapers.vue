@@ -591,62 +591,6 @@
                     class="mt-2"
                   />
                 </template>
-
-                <div class="section-header mt-4">
-                  <div class="section-title">存储设置</div>
-                </div>
-                <el-form-item label="存储方式">
-                  <el-radio-group v-model="form.params.storage_type">
-                    <el-radio label="mongo">MongoDB (默认)</el-radio>
-                    <el-radio label="oss">对象存储 (OSS)</el-radio>
-                  </el-radio-group>
-                  <div class="input-tip">选择采集内容的存储介质。OSS 适合存储大规模网页源码。</div>
-                </el-form-item>
-
-                <div class="custom-storage-fields mt-2" v-if="form.params.storage_type === 'mongo'">
-                  <el-form-item label="自定义集合名称">
-                    <el-input v-model="form.params.mongo_collection" placeholder="默认使用站点名称" clearable />
-                    <div class="input-tip">不填则默认使用站点英文标识作为 MongoDB 集合名。</div>
-                  </el-form-item>
-                </div>
-
-                <div class="custom-storage-fields mt-2" v-if="form.params.storage_type === 'oss'">
-                  <el-form-item label="OSS 存储路径">
-                    <el-input v-model="form.params.oss_path" placeholder="例如: /scraped/news/" clearable />
-                    <div class="input-tip">网页 HTML 将以文件形式存储在 OSS 的指定目录下。</div>
-                  </el-form-item>
-                </div>
-
-                <div class="section-header mt-4">
-                  <div class="section-title">重试与保存</div>
-                </div>
-                <el-form-item label="缓存加速">
-                  <div class="switch-container">
-                    <el-switch v-model="form.cache.enabled" />
-                    <span class="switch-tip">{{ form.cache.enabled ? '开启 (相同 URL 在 TTL 内不再重复抓取)' : '关闭 (每次都实时抓取)' }}</span>
-                  </div>
-                </el-form-item>
-                
-                <el-form-item label="缓存有效期 (秒)" v-if="form.cache.enabled">
-                  <el-input-number v-model="form.cache.ttl" :min="60" :step="60" style="width: 100%" />
-                  <div class="input-tip">在有效期内，系统将直接从缓存读取该 URL 的抓取结果。</div>
-                </el-form-item>
-
-                <el-row :gutter="20">
-                  <el-col :span="12">
-                    <el-form-item label="失败重试">
-                      <div class="switch-container">
-                        <el-switch v-model="form.retry_enabled" />
-                        <span class="switch-tip">{{ form.retry_enabled ? '开启 (自动重试)' : '关闭 (不重试)' }}</span>
-                      </div>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="12" v-if="form.retry_enabled">
-                    <el-form-item label="最大重试次数">
-                      <el-input-number v-model="form.max_retries" :min="1" :max="10" style="width: 100%" />
-                    </el-form-item>
-                  </el-col>
-                </el-row>
               </div>
             </div>
           </el-tab-pane>

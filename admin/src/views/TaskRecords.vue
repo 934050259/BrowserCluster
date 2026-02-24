@@ -138,13 +138,12 @@
 
         <el-table-column label="性能与重试" width="180" align="center">
           <template #default="{ row }">
-            <div class="performance-retry-cell" v-if="row.duration || row.result?.metadata?.load_time || (row.retry_count || 0) > 0">
-              <div class="performance-cell" v-if="row.duration || row.result?.metadata?.load_time">
+            <div class="performance-retry-cell" v-if="row.duration || (row.retry_count || 0) > 0">
+              <div class="performance-cell" v-if="row.duration">
                 <div class="duration-bar-container">
                   <el-tooltip placement="top">
                     <template #content>
-                      总耗时: {{ row.duration?.toFixed(2) }}s<br/>
-                      页面加载: {{ row.result?.metadata?.load_time?.toFixed(2) }}s
+                      总耗时: {{ row.duration?.toFixed(2) }}s
                     </template>
                     <div class="duration-visual">
                       <div class="duration-label">
@@ -153,7 +152,10 @@
                       <div class="duration-bar">
                         <div 
                           class="bar-load" 
-                          :style="{ width: getLoadPercent(row) + '%' }"
+                          :style="{ 
+                            width: getDurationPercent(row.duration) + '%',
+                            background: getBarColor(getDurationPercent(row.duration))
+                          }"
                         ></div>
                       </div>
                     </div>
@@ -769,9 +771,15 @@ const getStatusColor = (status) => {
   return colors[status] || 'info'
 }
 
-const getLoadPercent = (row) => {
-  if (!row.duration || !row.result?.metadata?.load_time) return 0
-  return Math.min(100, (row.result.metadata.load_time / row.duration) * 100)
+const getDurationPercent = (duration) => {
+  if (!duration) return 0
+  return Math.min(100, (duration / 60) * 100)
+}
+
+const getBarColor = (percent) => {
+  if (percent < 30) return 'linear-gradient(90deg, #67c23a, #95d475)' // 绿色 (快速 < 18s)
+  if (percent < 70) return 'linear-gradient(90deg, #e6a23c, #f3d19e)' // 橙色 (一般 < 42s)
+  return 'linear-gradient(90deg, #f56c6c, #fab6b6)' // 红色 (较慢 > 42s)
 }
 
 const formatStatus = (status) => {
@@ -1043,9 +1051,23 @@ tr:hover .copy-btn-hover {
 
 .bar-load {
   height: 100%;
-  background: linear-gradient(90deg, #409eff, #36cfc9);
+  background: linear-gradient(90deg, #67c23a, #409eff);
   border-radius: 3px;
-  transition: width 0.3s ease;
+  transition: all 0.3s ease;
+}
+
+.performance-retry-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.duration-bar-container {
+  width: 100%;
+  max-width: 120px;
+  margin: 0 auto;
 }
 
 .time-cell {
