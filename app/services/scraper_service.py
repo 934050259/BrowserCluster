@@ -174,6 +174,7 @@ async def execute_scraper_task(scraper_doc: dict):
                 mongo_collection=get_val("mongo_collection"),
                 oss_path=get_val("oss_path"),
                 save_html=get_val("save_html", True),
+                return_cookies=get_val("return_cookies", False),
                 screenshot=get_val("screenshot", False),
                 is_fullscreen=get_val("is_fullscreen", False),
                 max_retries=get_val("max_retries", 0)

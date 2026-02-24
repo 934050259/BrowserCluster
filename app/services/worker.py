@@ -90,7 +90,7 @@ class Worker:
                 "engine", "wait_for", "timeout", "viewport", "stealth", 
                 "save_html", "screenshot", "is_fullscreen", "block_images",
                 "intercept_apis", "intercept_continue", "proxy", "proxy_pool_group",
-                "storage_type", "mongo_collection", "oss_path"
+                "storage_type", "mongo_collection", "oss_path", "return_cookies"
             ]
             
             applied_changes = False

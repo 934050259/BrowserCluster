@@ -456,6 +456,13 @@
                   </div>
                   <div class="feature-item">
                     <div class="feature-info">
+                      <span class="feature-name">返回 Cookies</span>
+                      <span class="feature-desc">任务完成后返回当前页面的 Cookies (字符串形式)</span>
+                    </div>
+                    <el-switch v-model="form.params.return_cookies" />
+                  </div>
+                  <div class="feature-item">
+                    <div class="feature-info">
                       <span class="feature-name">页面截图</span>
                       <span class="feature-desc">采集完成后自动保存页面截图</span>
                     </div>
@@ -1630,6 +1637,7 @@ const handleAdd = async () => {
             mongo_collection: '',
             oss_path: '',
             save_html: true,
+            return_cookies: false,
             screenshot: false,
             is_fullscreen: false,
         },
@@ -1686,6 +1694,7 @@ const handleEdit = async (row) => {
         mongo_collection: '',
         oss_path: '',
         save_html: true,
+        return_cookies: false,
         screenshot: false,
         is_fullscreen: false,
     }

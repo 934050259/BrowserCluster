@@ -31,6 +31,7 @@ class ScrapeParams(BaseModel):
     proxy: Optional[Dict[str, Any]] = None  # 代理配置 {server, username, password}
     proxy_pool_group: Optional[str] = None  # 代理池分组 (如果设置，将自动从该分组中选择代理)
     cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None  # Cookies, 支持 str, list [dict] 或 dict {name: value}
+    return_cookies: bool = False  # 是否返回 Cookies
     stealth: bool = True  # 是否启用反检测 (stealth)
     intercept_apis: Optional[List[str]] = None  # 要拦截的接口 URL 模式列表
     intercept_continue: bool = False  # 拦截接口后是否继续请求 (默认 False)
@@ -78,6 +79,7 @@ class ScrapedResult(BaseModel):
     oss_screenshot: Optional[str] = None  # OSS 存储的截图链接
     storage_type: str = "mongo"  # 存储位置: mongo, oss
     metadata: Optional[TaskMetadata] = None  # 元数据
+    cookies: Optional[str] = None  # 返回的 Cookies 字符串
     intercepted_apis: Optional[Dict[str, List[Dict[str, Any]]]] = None  # 拦截到的接口数据 (键名中的 . 和 $ 已被转义为 _)
     parsed_data: Optional[Union[Dict[str, Any], List[Any]]] = None  # HTML 解析后的结构化数据
 

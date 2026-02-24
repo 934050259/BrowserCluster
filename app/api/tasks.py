@@ -66,6 +66,8 @@ async def get_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     result = task.get("result", {})
+
+    print(result)
     
     # 如果需要 HTML 且 MongoDB 中没有但 OSS 中有，则从 OSS 获取 (使用 SDK 绕过 403)
     if include_html and result and not result.get("html") and result.get("oss_html"):

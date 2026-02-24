@@ -787,11 +787,25 @@ class Scraper:
                 except:
                     pass
 
+            # 获取 Cookies
+            returned_cookies = None
+            if params.get("return_cookies"):
+                try:
+                    cookies_list = await context.cookies()
+                    cookie_strings = []
+                    for cookie in cookies_list:
+                        cookie_strings.append(f"{cookie['name']}={cookie['value']}")
+                    returned_cookies = "; ".join(cookie_strings)
+                    logger.info(f"Successfully fetched {len(cookies_list)} cookies")
+                except Exception as e:
+                    logger.error(f"Error getting cookies: {e}")
+
             # 返回成功结果
             result = {
                 "status": "success",
                 "html": html,
                 "screenshot": screenshot,
+                "cookies": returned_cookies,
                 "metadata": {
                     "title": title,
                     "url": url,
@@ -929,15 +943,30 @@ class Scraper:
                     logger.info("Cloudflare challenge seems bypassed.")
                     break
                 
+                try:
+                    # 尝试点击 Cloudflare 的典型中心区域
+                    tab.ele(".ctp-button", timeout=5).click()
+                    print("[*] 尝试点击验证按钮...")
+                except:
+                    pass
+
                 # 直接获取div, 点击
                 try:
-                    tab.ele("x://div[@class='main-content']/div[1]").click.at(30, 30)
-                    tab.ele("x://div[@class='main-content']/div[1]").click.at(40, 40)
+                    tab.ele("x://div[@class='main-content']/div[1]", timeout=5).click.at(30, 30)
+                    tab.ele("x://div[@class='main-content']/div[1]", timeout=5).click.at(40, 40)
                 except Exception as e:
                     # 忽略查找过程中的小错误
                     pass
+
+                try:
+                    # 尝试点击 Cloudflare 的典型中心区域
+                    tab.ele("x://div[@style='display: grid;']", timeout=5).click.at(30, 30)
+                    tab.ele("x://div[@style='display: grid;']", timeout=5).click.at(40, 40)
+                    print("[*] 尝试点击验证区域...")
+                except:
+                    pass
                     
-                time.sleep(5)
+                time.sleep(3)
             else:
                 logger.warning("Cloudflare challenge wait timeout.")
             
@@ -965,12 +994,26 @@ class Scraper:
                 except Exception as e:
                     logger.error(f"Error taking screenshot with DrissionPage: {e}")
 
+            # 获取 Cookies
+            returned_cookies = None
+            if params.get("return_cookies"):
+                try:
+                    cookies_dict = tab.cookies().as_dict()
+                    cookie_strings = []
+                    for name, value in cookies_dict.items():
+                        cookie_strings.append(f"{name}={value}")
+                    returned_cookies = "; ".join(cookie_strings)
+                    logger.info(f"Successfully fetched {len(cookies_dict)} cookies from DrissionPage")
+                except Exception as e:
+                    logger.error(f"Error getting cookies from DrissionPage: {e}")
+
             load_time = time.time() - start_time
             
             return {
                 "status": "success",
                 "html": html,
                 "screenshot": screenshot,
+                "cookies": returned_cookies,
                 "metadata": {
                     "title": title,
                     "url": url,

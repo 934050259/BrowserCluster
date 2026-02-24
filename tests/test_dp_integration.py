@@ -12,7 +12,9 @@ from app.core.config import settings
 def test_cloudflare_bypass():
     """测试 DrissionPage 绕过 Cloudflare 5秒盾"""
     # 目标网站 (已知有 Cloudflare 保护)
-    test_url = "https://cn.airbusan.com/content/common/customercenter/noticeList"
+    # test_url = "https://cn.airbusan.com/content/common/customercenter/noticeList"
+    # test_url = "https://toppsta.com/books/series/29278/national-geographic-kids-readers-level-1"
+    test_url = "https://www.mediamarkt.de/de/product/_ecg-nm-2255-milk-frother-black-90790545.html"
     print(f"[*] 正在启动测试，目标地址: {test_url}")
     
     # 初始化管理器
@@ -50,12 +52,28 @@ def test_cloudflare_bypass():
                "验证您是否是真人" not in title:
                 print("[+] Cloudflare 挑战似乎已绕过!")
                 break
+
+            try:
+                # 尝试点击 Cloudflare 的典型中心区域
+                tab.ele(".ctp-button").click()
+                print("[*] 尝试点击验证按钮...")
+            except:
+                pass
             
             # 尝试查找并点击潜在的验证按钮 (iframe 外部或简单的 div 按钮)
             try:
                 # 尝试点击 Cloudflare 的典型中心区域
-                tab.ele("x://div[@class='main-content']/div[1]").click.at(30, 30)
-                tab.ele("x://div[@class='main-content']/div[1]").click.at(40, 40)
+                tab.ele("x://div[@class='main-content']/div[1]", timeout=5).click.at(30, 30)
+                tab.ele("x://div[@class='main-content']/div[1]", timeout=5).click.at(40, 40)
+                print("[*] 尝试点击验证区域...")
+            except:
+                pass
+
+            #尝试查找并点击潜在的验证按钮 (iframe 外部或简单的 div 按钮)
+            try:
+                # 尝试点击 Cloudflare 的典型中心区域
+                tab.ele("x://div[@style='display: grid;']", timeout=5).click.at(30, 30)
+                tab.ele("x://div[@style='display: grid;']", timeout=5).click.at(40, 40)
                 print("[*] 尝试点击验证区域...")
             except:
                 pass
@@ -73,7 +91,7 @@ def test_cloudflare_bypass():
                 pass
 
             print(f"[*] 还在等待中... (当前标题: {title})")
-            time.sleep(5)
+            time.sleep(3)
         else:
             print("[-] 等待超时，可能未能绕过 5s 盾。")
             

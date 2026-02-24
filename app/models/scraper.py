@@ -44,6 +44,7 @@ class ScraperBase(BaseModel):
     proxy: Optional[Dict[str, Any]] = Field(None, description="代理配置 {server, username, password}")
     proxy_pool_group: Optional[str] = Field(None, description="代理池分组")
     cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = Field(None, description="Cookies")
+    return_cookies: bool = Field(False, description="是否返回 Cookies")
     intercept_apis: Optional[List[str]] = Field(None, description="要拦截的接口 URL 模式列表")
     intercept_continue: bool = Field(False, description="拦截接口后是否继续请求")
     

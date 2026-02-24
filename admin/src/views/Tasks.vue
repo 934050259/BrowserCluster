@@ -679,6 +679,13 @@
                   </div>
                   <el-switch v-model="scrapeForm.params.block_images" />
                 </div>
+                <div class="feature-item">
+                  <div class="feature-info">
+                    <span class="feature-name">返回 Cookies</span>
+                    <span class="feature-desc">任务完成后返回当前页面的 Cookies (字符串形式)</span>
+                  </div>
+                  <el-switch v-model="scrapeForm.params.return_cookies" />
+                </div>
               </div>
             </div>
           </el-tab-pane>
@@ -921,6 +928,24 @@
                   {{ currentTask.params?.save_html !== false ? '是' : '否' }}
                 </el-tag>
               </el-descriptions-item>
+              <el-descriptions-item>
+                <template #label>
+                  <div class="label-box"><el-icon><Key /></el-icon><span>返回 Cookies</span></div>
+                </template>
+                <el-tag :type="currentTask.params?.return_cookies ? 'success' : 'info'" size="default">
+                  {{ currentTask.params?.return_cookies ? '是' : '否' }}
+                </el-tag>
+                <el-tooltip content="复制 Cookies" placement="top" v-if="currentTask.result?.cookies">
+                  <el-button 
+                    link 
+                    type="primary" 
+                    size="small" 
+                    :icon="CopyDocument" 
+                    @click="copyToClipboard(currentTask.result.cookies)"
+                    style="margin-left: 8px;"
+                  />
+                </el-tooltip>
+              </el-descriptions-item>
               <el-descriptions-item v-if="currentTask.retry_count > 0">
                 <template #label>
                   <div class="label-box"><el-icon><RefreshRight /></el-icon><span>自动重试</span></div>
@@ -1085,6 +1110,19 @@
               </template>
               <el-empty v-else-if="loadingHtml" description="正在加载源码..." />
               <el-empty v-else description="暂无 HTML 源码" />
+            </div>
+          </el-tab-pane>
+
+          <el-tab-pane label="Cookies" name="cookies" v-if="currentTask.result?.cookies">
+            <div class="cookies-section">
+              <div class="section-actions" style="margin-bottom: 10px; text-align: right;">
+                <el-button type="primary" size="small" :icon="CopyDocument" @click="copyToClipboard(currentTask.result.cookies)">
+                  一键复制 Cookies
+                </el-button>
+              </div>
+              <div class="json-box">
+                <pre>{{ currentTask.result.cookies }}</pre>
+              </div>
             </div>
           </el-tab-pane>
 
@@ -1259,7 +1297,7 @@ const applyMatchedRule = (rule, silent = false) => {
   // 应用浏览器特征和高级配置
   const syncFields = [
     "engine", "wait_for", "timeout", "viewport", "stealth", 
-    "save_html", "screenshot", "is_fullscreen", "block_images",
+    "save_html", "return_cookies", "screenshot", "is_fullscreen", "block_images",
     "intercept_apis", "intercept_continue", "proxy", "cookies",
     "storage_type", "mongo_collection", "oss_path"
   ]
@@ -1644,6 +1682,7 @@ const fillFormFromTask = (row) => {
     mongo_collection: params.mongo_collection || '',
     oss_path: params.oss_path || '',
     save_html: params.save_html !== undefined ? params.save_html : true,
+    return_cookies: params.return_cookies !== undefined ? params.return_cookies : false,
     parser: params.parser || '',
     parser_config: params.parser_config || { fields: ['title', 'content'] },
     intercept_apis: params.intercept_apis || [],
@@ -1909,6 +1948,7 @@ const resetForm = () => {
       stealth: true,
       storage_type: 'mongo',
       save_html: true,
+      return_cookies: false,
       intercept_apis: [],
       intercept_continue: false
     },
