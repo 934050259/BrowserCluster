@@ -11,6 +11,7 @@ from typing import List, Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from apscheduler.triggers.date import DateTrigger
 from app.db.mongo import mongo
 from app.models.schedule import ScheduleModel, ScheduleStatus, ScheduleType
 from app.services.task_service import task_service
@@ -134,6 +135,11 @@ class SchedulerService:
                 trigger = IntervalTrigger(seconds=schedule.interval)
             elif schedule.schedule_type == ScheduleType.CRON:
                 trigger = CronTrigger.from_crontab(schedule.cron)
+            elif schedule.schedule_type == ScheduleType.ONCE:
+                if schedule.once_time:
+                    trigger = DateTrigger(run_date=schedule.once_time)
+                else:
+                    logger.warning(f"Schedule {schedule.schedule_id} is 'once' but once_time is missing")
 
             if trigger:
                 self.scheduler.add_job(

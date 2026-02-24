@@ -18,6 +18,7 @@ class ScheduleType(str, Enum):
     """调度类型"""
     INTERVAL = "interval"  # 间隔执行 (秒/分/时/天)
     CRON = "cron"          # Cron 表达式
+    ONCE = "once"          # 指定时间执行一次
 
 
 class ScheduleModel(BaseModel):
@@ -36,6 +37,7 @@ class ScheduleModel(BaseModel):
     schedule_type: ScheduleType = ScheduleType.INTERVAL
     interval: Optional[int] = None  # 间隔时间（秒），用于 INTERVAL 类型
     cron: Optional[str] = None  # Cron 表达式，用于 CRON 类型
+    once_time: Optional[datetime] = None  # 指定执行时间，用于 ONCE 类型
     
     status: ScheduleStatus = ScheduleStatus.ACTIVE  # 状态
     last_run: Optional[datetime] = None  # 最近一次运行时间
@@ -57,6 +59,7 @@ class ScheduleCreate(BaseModel):
     schedule_type: ScheduleType
     interval: Optional[int] = None
     cron: Optional[str] = None
+    once_time: Optional[datetime] = None
 
 
 class ScheduleUpdate(BaseModel):
@@ -72,4 +75,5 @@ class ScheduleUpdate(BaseModel):
     schedule_type: Optional[ScheduleType] = None
     interval: Optional[int] = None
     cron: Optional[str] = None
+    once_time: Optional[datetime] = None
     status: Optional[ScheduleStatus] = None

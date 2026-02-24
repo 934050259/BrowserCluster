@@ -73,7 +73,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="调度策略" width="200">
+        <el-table-column label="调度策略" width="220">
           <template #default="{ row }">
             <div class="schedule-policy">
               <el-tag v-if="row.schedule_type === 'interval'" type="info" size="small" class="policy-tag">
@@ -83,7 +83,7 @@
                 Cron: {{ row.cron }}
               </el-tag>
               <el-tag v-else-if="row.schedule_type === 'once'" type="success" size="small" class="policy-tag">
-                定时: {{ row.once_time }}
+                定时: {{ formatDate(row.once_time) }}
               </el-tag>
             </div>
           </template>
@@ -1811,7 +1811,6 @@ onMounted(() => {
 .time-item .value {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
-  color: #475569;
 }
 
 .pagination-container {
