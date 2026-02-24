@@ -106,7 +106,7 @@
         <!-- Header -->
         <el-header class="header">
           <div class="header-left">
-            <el-icon class="collapse-btn" @click="isCollapse = !isCollapse">
+            <el-icon class="collapse-btn" @click="toggleCollapse">
               <Expand v-if="isCollapse" />
               <Fold v-else />
             </el-icon>
@@ -179,7 +179,7 @@
         <!-- Main Content -->
         <el-main class="main-content">
           <router-view v-slot="{ Component }">
-            <transition name="fade-transform">
+            <transition name="fade-transform" mode="out-in">
               <keep-alive>
                 <component :is="Component" />
               </keep-alive>
@@ -207,7 +207,13 @@ const route = useRoute()
 const statsStore = useStatsStore()
 const authStore = useAuthStore()
 
-const isCollapse = ref(false)
+const isCollapse = ref(localStorage.getItem('sidebarStatus') === 'collapsed')
+
+const toggleCollapse = () => {
+  isCollapse.value = !isCollapse.value
+  localStorage.setItem('sidebarStatus', isCollapse.value ? 'collapsed' : 'expanded')
+}
+
 const stats = computed(() => statsStore.stats)
 const currentUser = computed(() => authStore.user || {})
 const isAdmin = computed(() => authStore.isAdmin)
@@ -306,24 +312,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   background-color: #f0f2f5;
-}
-
-/* Fade Transform Transition */
-.fade-transform-enter-active,
-.fade-transform-leave-active {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  position: absolute;
-  width: calc(100% - 40px); /* 减去 el-main 的 padding */
-}
-
-.fade-transform-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.fade-transform-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
 }
 
 .app-wrapper {
@@ -651,6 +639,8 @@ body {
 
 .main-content {
   padding: 20px;
+  position: relative;
+  overflow-x: hidden;
 }
 
 /* Transitions - 优化切换流畅度 */
@@ -661,11 +651,11 @@ body {
 
 .fade-transform-enter-from {
   opacity: 0;
-  transform: translateX(-15px);
+  transform: translateX(-10px);
 }
 
 .fade-transform-leave-to {
   opacity: 0;
-  transform: translateX(15px);
+  transform: translateX(10px);
 }
 </style>

@@ -2041,6 +2041,8 @@ const formatJSON = (content) => {
 }
 
 onActivated(() => {
+  // 每次进入页面时重置页码为 1
+  currentPage.value = 1
   loadTasks()
   loadProxyGroups()
 })
