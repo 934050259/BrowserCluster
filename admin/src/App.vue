@@ -602,8 +602,8 @@ body {
 
 .rate-text {
   font-size: 10px;
-  font-weight: 700;
-  padding-right: 15px;
+  font-weight: 800;
+  padding-right: 16px;
   display: inline-block;
 }
 

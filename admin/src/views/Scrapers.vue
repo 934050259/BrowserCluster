@@ -191,7 +191,7 @@
                 </el-form-item>
 
                 <el-row :gutter="20">
-                  <el-col :span="12">
+                  <el-col :span="13">
                     <el-form-item label="存储位置">
                       <el-radio-group v-model="form.params.storage_type" size="default">
                         <el-radio-button label="mongo">MongoDB</el-radio-button>
@@ -211,6 +211,10 @@
                               <template #prefix><el-icon><Collection /></el-icon></template>
                             </el-input>
                           </div>
+                          <div class="storage-path-preview">
+                            <el-icon><InfoFilled /></el-icon>
+                            <span>实际存储集合: <code>{{ form.params.mongo_collection || (form.name ? 'scraper_results' : 'scraper_results') }}</code></span>
+                          </div>
                         </template>
 
                         <template v-if="form.params.storage_type === 'oss'">
@@ -224,6 +228,10 @@
                             >
                               <template #prefix><el-icon><FolderOpened /></el-icon></template>
                             </el-input>
+                          </div>
+                          <div class="storage-path-preview">
+                            <el-icon><InfoFilled /></el-icon>
+                            <span>实际存储路径: <code>{{ form.params.oss_path ? (form.params.oss_path.endsWith('/') ? form.params.oss_path : form.params.oss_path + '/') : 'scrapers/' }}{任务ID}/...</code></span>
                           </div>
                         </template>
                       </div>
@@ -1669,6 +1677,11 @@ const handleEdit = async (row) => {
     if (form.retry_enabled === undefined) form.retry_enabled = true
     if (form.max_retries === undefined) form.max_retries = 3
     
+    // 兼容处理 storage_type: 优先从 params 中取，如果没有则从 top-level 取，再没有则默认 mongo
+    if (!form.params.storage_type) {
+        form.params.storage_type = row.storage_type || 'mongo'
+    }
+    
     // 确保在打开编辑弹窗前，规则列表是最新的
     await fetchRules()
     dialogVisible.value = true
@@ -1973,6 +1986,44 @@ onUnmounted(() => {
   padding: 16px;
   border-radius: 8px;
   border: 1px solid #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.storage-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.input-label-tip {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.storage-path-preview {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px dashed #e2e8f0;
+}
+
+.storage-path-preview code {
+  background: #fff;
+  padding: 1px;
+  border-radius: 4px;
+  color: #3b82f6;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
 }
 
 .scraper-dialog :deep(.el-dialog__body) {
