@@ -134,15 +134,17 @@ async def scrape(request: ScrapeRequest):
         )
         raise HTTPException(status_code=500, detail="Failed to queue task")
     
-    # 设置超时时间（默认 30 秒，或使用请求参数中的超时）
-    timeout = request.params.timeout / 1000 if request.params.timeout else 30
+    # 设置 API 等待超时时间
+    # 逻辑：API 等待时间 = 任务本身的浏览器超时时间 + 30 秒缓冲（用于队列排队和系统开销）
+    task_timeout_ms = request.params.timeout if request.params.timeout else settings.default_timeout
+    wait_timeout = (task_timeout_ms / 1000) + 30
     start_time = datetime.now()
     
     # 轮询检查间隔
-    check_interval = 1
+    check_interval = 0.5  # 缩短检查间隔，提高响应速度
     
     try:
-        while (datetime.now() - start_time).total_seconds() < timeout:
+        while (datetime.now() - start_time).total_seconds() < wait_timeout:
             # 检查任务状态
             task = mongo.tasks.find_one({"task_id": task_id})
             
