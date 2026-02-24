@@ -941,7 +941,7 @@
                     type="primary" 
                     size="small" 
                     :icon="CopyDocument" 
-                    @click="copyToClipboard(currentTask.result.cookies)"
+                    @click="copyToClipboard(JSON.stringify(currentTask.result.cookies))"
                     style="margin-left: 8px;"
                   />
                 </el-tooltip>
@@ -1116,12 +1116,12 @@
           <el-tab-pane label="Cookies" name="cookies" v-if="currentTask.result?.cookies">
             <div class="cookies-section">
               <div class="section-actions" style="margin-bottom: 10px; text-align: right;">
-                <el-button type="primary" size="small" :icon="CopyDocument" @click="copyToClipboard(currentTask.result.cookies)">
+                <el-button type="primary" size="small" :icon="CopyDocument" @click="copyToClipboard(JSON.stringify(currentTask.result.cookies))">
                   一键复制 Cookies
                 </el-button>
               </div>
               <div class="json-box">
-                <pre>{{ currentTask.result.cookies }}</pre>
+                <pre>{{ formatJSON(currentTask.result.cookies) }}</pre>
               </div>
             </div>
           </el-tab-pane>

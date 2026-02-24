@@ -791,12 +791,10 @@ class Scraper:
             returned_cookies = None
             if params.get("return_cookies"):
                 try:
+                    # 返回字典格式的 Cookies {name: value}
                     cookies_list = await context.cookies()
-                    cookie_strings = []
-                    for cookie in cookies_list:
-                        cookie_strings.append(f"{cookie['name']}={cookie['value']}")
-                    returned_cookies = "; ".join(cookie_strings)
-                    logger.info(f"Successfully fetched {len(cookies_list)} cookies")
+                    returned_cookies = {cookie['name']: cookie['value'] for cookie in cookies_list}
+                    logger.info(f"Successfully fetched {len(returned_cookies)} cookies")
                 except Exception as e:
                     logger.error(f"Error getting cookies: {e}")
 
@@ -998,12 +996,9 @@ class Scraper:
             returned_cookies = None
             if params.get("return_cookies"):
                 try:
-                    cookies_dict = tab.cookies().as_dict()
-                    cookie_strings = []
-                    for name, value in cookies_dict.items():
-                        cookie_strings.append(f"{name}={value}")
-                    returned_cookies = "; ".join(cookie_strings)
-                    logger.info(f"Successfully fetched {len(cookies_dict)} cookies from DrissionPage")
+                    # 使用 as_dict=True 获取字典格式的 Cookies {name: value}
+                    returned_cookies = tab.cookies().as_dict()
+                    logger.info(f"Successfully fetched {len(returned_cookies)} cookies from DrissionPage")
                 except Exception as e:
                     logger.error(f"Error getting cookies from DrissionPage: {e}")
 

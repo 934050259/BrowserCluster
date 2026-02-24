@@ -79,7 +79,7 @@ class ScrapedResult(BaseModel):
     oss_screenshot: Optional[str] = None  # OSS 存储的截图链接
     storage_type: str = "mongo"  # 存储位置: mongo, oss
     metadata: Optional[TaskMetadata] = None  # 元数据
-    cookies: Optional[str] = None  # 返回的 Cookies 字符串
+    cookies: Optional[Union[str, Dict[str, str], List[Dict[str, Any]]]] = None  # 返回的 Cookies, 支持 str, dict {name: value} 或 list[dict]
     intercepted_apis: Optional[Dict[str, List[Dict[str, Any]]]] = None  # 拦截到的接口数据 (键名中的 . 和 $ 已被转义为 _)
     parsed_data: Optional[Union[Dict[str, Any], List[Any]]] = None  # HTML 解析后的结构化数据
 
