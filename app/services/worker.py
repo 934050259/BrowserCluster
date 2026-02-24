@@ -100,10 +100,15 @@ class Worker:
                 if field == "proxy" and isinstance(val, dict) and not val.get("server"):
                     val = None
                 
-                # 如果任务 params 中没有该字段，或者该字段是空的/默认的，则使用规则配置
+                # 只有当 params 中没有该字段，或者该字段是 None 时，才使用规则配置
+                # 这样可以确保用户手动设置的参数（即使是默认值）不会被覆盖
+                # 注意：这里我们假设前端传递参数时，未设置的参数是 None 或不在 dict 中
+                # 如果前端传递了默认值（如 False, 0, ""），则视为用户明确意图，不覆盖
                 if field not in params or val is None:
-                    params[field] = matched_rule.get(field)
-                    applied_changes = True
+                    rule_val = matched_rule.get(field)
+                    if rule_val is not None:
+                        params[field] = rule_val
+                        applied_changes = True
             
             # 3. Cookies (如果任务没有指定)
             if not params.get("cookies") and matched_rule.get("cookies"):

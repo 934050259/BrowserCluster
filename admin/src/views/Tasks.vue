@@ -295,7 +295,18 @@
                       <el-icon><MagicStick /></el-icon>
                       <span>发现该域名的 {{ matchedRules.length }} 条可用规则</span>
                     </div>
-                    <div class="header-tip">点击下方规则可快速切换应用配置</div>
+                    <div class="header-actions">
+                      <el-button 
+                        v-if="selectedRuleId" 
+                        size="small" 
+                        type="info" 
+                        link 
+                        @click="cancelMatchedRule"
+                      >
+                        取消使用规则
+                      </el-button>
+                      <span class="header-tip" v-else>点击下方规则可快速切换应用配置</span>
+                    </div>
                   </div>
                   <div class="rules-grid">
                     <div 
@@ -328,6 +339,7 @@
                         type="textarea"
                         :rows="3"
                         placeholder="输入 Cookies 字符串或 JSON 格式，如：key1=value1; key2=value2"
+                        :disabled="!!selectedRuleId && matchedCookies"
                       />
                       <div class="cookies-tip" v-if="matchedCookies">
                         <el-icon class="success-icon"><CircleCheckFilled /></el-icon>
@@ -494,12 +506,21 @@
               <!-- 匹配规则展示区已移至基础配置 -->
 
               <el-form-item label="解析模式">
-                <el-radio-group v-model="scrapeForm.params.parser" size="default">
+                <el-radio-group v-model="scrapeForm.params.parser" size="default" :disabled="!!selectedRuleId">
                   <el-radio-button label="">不解析</el-radio-button>
                   <el-radio-button label="gne">智能解析 (GNE)</el-radio-button>
                   <el-radio-button label="llm">大模型提取 (LLM)</el-radio-button>
                   <el-radio-button label="xpath">自定义规则 (XPath)</el-radio-button>
                 </el-radio-group>
+                <el-alert
+                  v-if="selectedRuleId"
+                  title="当前已锁定为规则配置模式"
+                  type="warning"
+                  description="下方所有参数已根据选定规则自动填充且不可手动修改。如需调整参数，请先点击顶部的「取消使用规则」。"
+                  show-icon
+                  :closable="false"
+                  style="margin-top: 10px;"
+                />
               </el-form-item>
 
               <div v-if="scrapeForm.params.parser === 'gne'" class="parser-config-area">
@@ -516,9 +537,9 @@
                 <div class="parser-presets">
                   <span class="preset-label">常用模板:</span>
                   <el-button-group>
-                    <el-button size="small" plain @click="applyLlmPreset('article')">文章提取</el-button>
-                    <el-button size="small" plain @click="applyLlmPreset('product')">商品详情</el-button>
-                    <el-button size="small" plain @click="applyLlmPreset('contact')">联系方式</el-button>
+                    <el-button size="small" plain @click="applyLlmPreset('article')" :disabled="!!selectedRuleId">文章提取</el-button>
+                    <el-button size="small" plain @click="applyLlmPreset('product')" :disabled="!!selectedRuleId">商品详情</el-button>
+                    <el-button size="small" plain @click="applyLlmPreset('contact')" :disabled="!!selectedRuleId">联系方式</el-button>
                   </el-button-group>
                 </div>
                 <el-form-item class="mt-4">
@@ -538,6 +559,7 @@
                     default-first-option
                     placeholder="选择或输入需要提取的字段"
                     style="width: 100%"
+                    :disabled="!!selectedRuleId"
                   >
                     <el-option
                       v-for="item in llmFieldOptions"
@@ -575,18 +597,18 @@
               <div v-if="scrapeForm.params.parser === 'xpath'" class="parser-config-area">
                 <div class="xpath-rules-header">
                   <span>XPath 规则配置</span>
-                  <el-button type="primary" link :icon="Plus" @click="addXpathRule">添加规则</el-button>
+                  <el-button type="primary" link :icon="Plus" @click="addXpathRule" :disabled="!!selectedRuleId">添加规则</el-button>
                 </div>
                 <div v-for="(rule, index) in xpathRules" :key="index" class="xpath-rule-row">
-                  <el-input v-model="rule.field" placeholder="字段名" style="width: 120px" />
-                  <el-input v-model="rule.path" placeholder="XPath 表达式，如: //h1/text()" style="flex: 1" />
+                  <el-input v-model="rule.field" placeholder="字段名" style="width: 120px" :disabled="!!selectedRuleId" />
+                  <el-input v-model="rule.path" placeholder="XPath 表达式，如: //h1/text()" style="flex: 1" :disabled="!!selectedRuleId" />
                   <el-button 
                     type="danger" 
                     circle
                     plain
                     :icon="Delete" 
                     @click="removeXpathRule(index)" 
-                    :disabled="xpathRules.length <= 1"
+                    :disabled="xpathRules.length <= 1 || !!selectedRuleId"
                     class="rule-delete-btn"
                   />
                 </div>
@@ -607,7 +629,7 @@
               <el-row :gutter="20">
                 <el-col :span="12">
                   <el-form-item label="浏览器引擎">
-                    <el-select v-model="scrapeForm.params.engine" style="width: 100%">
+                    <el-select v-model="scrapeForm.params.engine" style="width: 100%" :disabled="!!selectedRuleId">
                       <el-option label="Playwright (默认)" value="playwright" />
                       <el-option label="DrissionPage (过盾强)" value="drissionpage" />
                     </el-select>
@@ -615,7 +637,7 @@
                 </el-col>
                 <el-col :span="12">
                   <el-form-item label="加载等待条件">
-                    <el-select v-model="scrapeForm.params.wait_for" style="width: 100%">
+                    <el-select v-model="scrapeForm.params.wait_for" style="width: 100%" :disabled="!!selectedRuleId">
                       <el-option label="Network Idle (推荐)" value="networkidle" />
                       <el-option label="Page Load (所有资源)" value="load" />
                       <el-option label="DOM Ready (HTML解析)" value="domcontentloaded" />
@@ -630,6 +652,7 @@
                       :min="5" 
                       :step="5" 
                       style="width: 100%" 
+                      :disabled="!!selectedRuleId"
                     />
                   </el-form-item>
                 </el-col>
@@ -637,9 +660,9 @@
 
               <el-form-item label="视口尺寸 (分辨率)">
                 <div class="viewport-input">
-                  <el-input-number v-model="scrapeForm.params.viewport.width" :min="320" placeholder="宽度" controls-position="right" />
+                  <el-input-number v-model="scrapeForm.params.viewport.width" :min="320" placeholder="宽度" controls-position="right" :disabled="!!selectedRuleId" />
                   <span class="sep">×</span>
-                  <el-input-number v-model="scrapeForm.params.viewport.height" :min="240" placeholder="高度" controls-position="right" />
+                  <el-input-number v-model="scrapeForm.params.viewport.height" :min="240" placeholder="高度" controls-position="right" :disabled="!!selectedRuleId" />
                 </div>
               </el-form-item>
 
@@ -649,42 +672,42 @@
                     <span class="feature-name">反检测模式 (Stealth)</span>
                     <span class="feature-desc">绕过大多数常见的机器人检测系统</span>
                   </div>
-                  <el-switch v-model="scrapeForm.params.stealth" />
+                  <el-switch v-model="scrapeForm.params.stealth" :disabled="!!selectedRuleId" />
                 </div>
                 <div class="feature-item">
                   <div class="feature-info">
                     <span class="feature-name">保存 HTML</span>
                     <span class="feature-desc">将完整的网页源码保存到数据库或 OSS</span>
                   </div>
-                  <el-switch v-model="scrapeForm.params.save_html" />
+                  <el-switch v-model="scrapeForm.params.save_html" :disabled="!!selectedRuleId" />
                 </div>
                 <div class="feature-item">
                   <div class="feature-info">
                     <span class="feature-name">自动截图</span>
                     <span class="feature-desc">保存网页快照用于调试或取证</span>
                   </div>
-                  <el-switch v-model="scrapeForm.params.screenshot" />
+                  <el-switch v-model="scrapeForm.params.screenshot" :disabled="!!selectedRuleId" />
                 </div>
                 <div class="feature-item" v-if="scrapeForm.params.screenshot">
                   <div class="feature-info">
                     <span class="feature-name">全屏快照</span>
                     <span class="feature-desc">捕获整个页面高度而不仅是可视区域</span>
                   </div>
-                  <el-switch v-model="scrapeForm.params.is_fullscreen" />
+                  <el-switch v-model="scrapeForm.params.is_fullscreen" :disabled="!!selectedRuleId" />
                 </div>
                 <div class="feature-item">
                   <div class="feature-info">
                     <span class="feature-name">屏蔽图片/媒体</span>
                     <span class="feature-desc">不加载图片和视频资源，加快抓取速度</span>
                   </div>
-                  <el-switch v-model="scrapeForm.params.block_images" />
+                  <el-switch v-model="scrapeForm.params.block_images" :disabled="!!selectedRuleId" />
                 </div>
                 <div class="feature-item">
                   <div class="feature-info">
                     <span class="feature-name">返回 Cookies</span>
                     <span class="feature-desc">任务完成后返回当前页面的 Cookies (字符串形式)</span>
                   </div>
-                  <el-switch v-model="scrapeForm.params.return_cookies" />
+                  <el-switch v-model="scrapeForm.params.return_cookies" :disabled="!!selectedRuleId" />
                 </div>
               </div>
             </div>
@@ -710,6 +733,7 @@
                 :reserve-keyword="false"
                 placeholder="输入匹配模式并按回车，例如: */api/* 或 *.json"
                 style="width: 100%"
+                :disabled="!!selectedRuleId"
               >
                   <el-option label="所有 API (*api*)" value="*api*" />
                   <el-option label="JSON 数据 (*.json)" value="*.json" />
@@ -719,7 +743,7 @@
 
               <el-form-item label="拦截后继续请求">
                 <div class="switch-container">
-                  <el-switch v-model="scrapeForm.params.intercept_continue" />
+                  <el-switch v-model="scrapeForm.params.intercept_continue" :disabled="!!selectedRuleId" />
                   <span class="switch-tip">{{ scrapeForm.params.intercept_continue ? '开启 (正常加载页面)' : '关闭 (拦截并停止, 节省流量)' }}</span>
                 </div>
               </el-form-item>
@@ -736,6 +760,7 @@
                   allow-create
                   style="width: 100%"
                   @change="val => val && (scrapeForm.params.proxy.server = '')"
+                  :disabled="!!selectedRuleId"
                 >
                   <el-option 
                     v-for="group in proxyGroups" 
@@ -761,7 +786,7 @@
                   v-model="scrapeForm.params.proxy.server" 
                   placeholder="http://proxy.example.com:8080" 
                   clearable 
-                  :disabled="!!scrapeForm.params.proxy_pool_group"
+                  :disabled="!!scrapeForm.params.proxy_pool_group || !!selectedRuleId"
                 />
                 <div class="input-tip" v-if="scrapeForm.params.proxy_pool_group">使用代理池时无法手动配置代理</div>
                 <el-alert
@@ -779,12 +804,12 @@
                 <el-row :gutter="20" v-if="scrapeForm.params.engine !== 'drissionpage'">
                   <el-col :span="12">
                     <el-form-item label="用户名">
-                      <el-input v-model="scrapeForm.params.proxy.username" />
+                      <el-input v-model="scrapeForm.params.proxy.username" :disabled="!!selectedRuleId" />
                     </el-form-item>
                   </el-col>
                   <el-col :span="12">
                     <el-form-item label="密码">
-                      <el-input v-model="scrapeForm.params.proxy.password" show-password />
+                      <el-input v-model="scrapeForm.params.proxy.password" show-password :disabled="!!selectedRuleId" />
                     </el-form-item>
                   </el-col>
                 </el-row>
@@ -1315,6 +1340,17 @@ const applyMatchedRule = (rule, silent = false) => {
   if (!silent) {
     ElMessage.success(`已应用 ${rule.domain} 的解析配置`)
   }
+}
+
+const cancelMatchedRule = () => {
+  // 仅清空规则关联状态，保留当前表单内容（用户可能想基于规则修改）
+  // 或者是彻底重置表单？通常用户既然点击取消，可能想恢复默认或手动配置
+  // 这里我们选择恢复默认基础配置，但保留 URL
+  const currentUrl = scrapeForm.value.url
+  resetForm()
+  scrapeForm.value.url = currentUrl
+  selectedRuleId.value = null
+  ElMessage.info('已取消规则应用，恢复默认配置')
 }
 
 // 监听标签页切换
@@ -2096,6 +2132,27 @@ onMounted(() => {
   justify-content: center;
   font-size: 12px;
   font-weight: bold;
+}
+
+/* 禁用状态下的样式增强 */
+:deep(.el-input.is-disabled .el-input__wrapper),
+:deep(.el-textarea.is-disabled .el-textarea__inner),
+:deep(.el-radio-button.is-disabled .el-radio-button__inner),
+:deep(.el-input-number.is-disabled .el-input-number__increase),
+:deep(.el-input-number.is-disabled .el-input-number__decrease) {
+  background-color: #f8fafc !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+  border-color: #e2e8f0 !important;
+}
+
+:deep(.el-radio-button.is-disabled.is-active .el-radio-button__inner) {
+  background-color: var(--el-color-primary-light-8) !important;
+  color: var(--el-color-primary) !important;
+}
+
+:deep(.el-switch.is-disabled) {
+  opacity: 0.6;
 }
 
 .rule-card-top {
