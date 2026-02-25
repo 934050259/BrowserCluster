@@ -133,19 +133,13 @@ class DrissionManager:
             if params and params.get("proxy"):
                 proxy_config = params.get("proxy")
                 if isinstance(proxy_config, dict) and proxy_config.get("server"):
-                    server = proxy_config["server"]
-                    # DrissionPage 代理格式: 'http://user:pass@host:port'
-                    if proxy_config.get("username") and proxy_config.get("password"):
-                        user = proxy_config["username"]
-                        password = proxy_config["password"]
-                        if '://' in server:
-                            protocol, address = server.split('://', 1)
-                            server = f"{protocol}://{user}:{password}@{address}"
-                        else:
-                            server = f"http://{user}:{password}@{server}"
-                    
-                    co.set_proxy(server)
-                    logger.info(f"DrissionPage initialized with proxy: {server}")
+                    # 校验 DrissionPage 代理：不支持账密认证
+                    if proxy_config.get("username") or proxy_config.get("password"):
+                        logger.error("DrissionPage 引擎目前不支持带账密认证的代理，跳过代理配置。")
+                    else:
+                        server = proxy_config["server"]
+                        co.set_proxy(server)
+                        logger.info(f"DrissionPage initialized with proxy: {server}")
             
             self._page = ChromiumPage(co)
             return self._page

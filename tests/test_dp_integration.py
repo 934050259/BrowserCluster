@@ -9,12 +9,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.drission_browser import DrissionManager
 from app.core.config import settings
 
+settings.load_from_db()
+
 def test_cloudflare_bypass():
     """测试 DrissionPage 绕过 Cloudflare 5秒盾"""
     # 目标网站 (已知有 Cloudflare 保护)
     # test_url = "https://cn.airbusan.com/content/common/customercenter/noticeList"
     # test_url = "https://toppsta.com/books/series/29278/national-geographic-kids-readers-level-1"
-    test_url = "https://www.mediamarkt.de/de/product/_ecg-nm-2255-milk-frother-black-90790545.html"
+    # test_url = "https://www.mediamarkt.de/de/product/_ecg-nm-2255-milk-frother-black-90790545.html"
+    # test_url = "https://simple.ripley.com.pe/"
+    # test_url = "https://pastebin.com/login"
+    test_url = "https://simple.ripley.com.pe/"
     print(f"[*] 正在启动测试，目标地址: {test_url}")
     
     # 初始化管理器

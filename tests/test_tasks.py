@@ -89,10 +89,9 @@ async def test_batch_tasks():
             {
                 "url": "https://myip.ipip.net/",
                 "params": {
+                    "engine": "drissionpage",
                     "proxy": {
-                    "server": "http://t127.juliangip.cc:13781",
-                    "username": "18240440465",
-                    "password": "0E9AEoHL"
+                    "server": "http://223.111.202.92:20198",
                     },
                     "save_html": False,
                     "screenshot": True,
@@ -107,9 +106,7 @@ async def test_batch_tasks():
                 "url": "https://myip.ipip.net/",
                 "params": {
                     "proxy": {
-                    "server": "http://t127.juliangip.cc:13781",
-                    "username": "18240440465",
-                    "password": "0E9AEoHL"
+                    "server": "http://223.111.202.93:20106",
                     },
                     "save_html": False,
                     "screenshot": True,
@@ -124,9 +121,7 @@ async def test_batch_tasks():
                 "url": "https://myip.ipip.net/",
                 "params": {
                     "proxy": {
-                    "server": "http://t127.juliangip.cc:13781",
-                    "username": "18240440465",
-                    "password": "0E9AEoHL"
+                    "server": "http://223.111.202.95:20016",
                     },
                     "save_html": False,
                     "screenshot": True,
