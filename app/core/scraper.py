@@ -86,13 +86,13 @@ class Scraper:
         max_pages = params.get("max_pages", 1)
         engine = params.get("engine") or settings.browser_engine
         
-        # 目前仅在 Playwright 下实现点击翻页会话模式，DrissionPage 暂维持原样
+        # DrissionPage 引擎会话模式实现
         if engine == "drissionpage":
-            return await self._scrape_list_legacy(
+            return await self._scrape_list_session_drission(
                 url, list_xpath, title_xpath, link_xpath, time_xpath, next_xpath, params
             )
 
-        # Windows 兼容性处理：如果不是 Proactor 循环，切换到独立线程
+        # Playwright 引擎会话模式实现 (带 Windows 兼容性处理)
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -111,6 +111,138 @@ class Scraper:
     def _sync_scrape_list_session(self, *args) -> Dict[str, Any]:
         """同步包装器，用于在独立线程中运行异步会话抓取"""
         return asyncio.run(self._scrape_list_session_internal(*args))
+
+    async def _scrape_list_session_drission(
+        self,
+        url: str,
+        list_xpath: str,
+        title_xpath: str,
+        link_xpath: str,
+        time_xpath: Optional[str],
+        next_xpath: str,
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """使用 DrissionPage 持久化浏览器会话抓取列表，支持点击翻页"""
+        return await asyncio.to_thread(
+            self._sync_scrape_list_session_drission,
+            url, list_xpath, title_xpath, link_xpath, time_xpath, next_xpath, params
+        )
+
+    def _sync_scrape_list_session_drission(
+        self,
+        url: str,
+        list_xpath: str,
+        title_xpath: str,
+        link_xpath: str,
+        time_xpath: Optional[str],
+        next_xpath: str,
+        params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """DrissionPage 内部实现：支持点击翻页的会话抓取 (同步实现)"""
+        max_pages = params.get("max_pages", 1)
+        all_items = []
+        last_html = ""
+        tab = None
+        
+        try:
+            # 1. 创建标签页并初始化
+            tab = drission_manager.create_tab(
+                no_images=params.get("no_images", True),
+                no_css=params.get("no_css", True),
+                proxy=params.get("proxy"),
+                proxy_pool_group=params.get("proxy_pool_group"),
+                user_agent=params.get("user_agent")
+            )
+            
+            timeout_s = (params.get("timeout") or settings.default_timeout) / 1000
+            wait_time = params.get("wait_time", 3000)
+            
+            # 2. 初始导航
+            logger.info(f"Drission session scraping started: {url}")
+            tab.get(url, timeout=timeout_s)
+            if wait_time > 0:
+                time.sleep(wait_time / 1000)
+
+            for page_num in range(1, max_pages + 1):
+                logger.info(f"Scraping page {page_num} in Drission session...")
+                
+                # 获取当前页面 HTML
+                html_content = tab.html
+                last_html = html_content
+                tree = lxml_html.fromstring(html_content)
+                
+                # 提取列表项
+                containers = tree.xpath(list_xpath)
+                page_items = []
+                for container in containers:
+                    item = {}
+                    def extract_one(xpath_str, default=""):
+                        if not xpath_str: return default
+                        try:
+                            res = container.xpath(xpath_str)
+                            if not res: return default
+                            if isinstance(res, list):
+                                texts = [r.strip() if isinstance(r, str) else r.text_content().strip() for r in res]
+                                return " ".join(filter(None, texts))
+                            return res.strip() if isinstance(r, str) else res.text_content().strip()
+                        except: return default
+
+                    item['title'] = extract_one(title_xpath)
+                    link = extract_one(link_xpath)
+                    item['link'] = urljoin(tab.url, link) if link else ""
+                    if time_xpath: item['time'] = extract_one(time_xpath)
+                    
+                    if item.get('title') or item.get('link'):
+                        page_items.append(item)
+                
+                all_items.extend(page_items)
+                logger.info(f"Page {page_num} extracted {len(page_items)} items")
+
+                # 如果不是最后一页，尝试翻页
+                if page_num < max_pages:
+                    logger.info(f"Attempting to click next page button: {next_xpath}")
+                    try:
+                        # 使用 DrissionPage 的方式定位并点击元素
+                        # 转换 XPath 格式 (DrissionPage 使用 x: 前缀表示 XPath)
+                        btn = tab.ele(f"x:{next_xpath}", timeout=timeout_s)
+                        
+                        if btn:
+                            # 确保元素可见并点击
+                            # DrissionPage 的 click() 默认会尝试滚动到视口
+                            btn.click()
+                            
+                            # 等待加载
+                            if wait_time > 0:
+                                time.sleep(wait_time / 1000)
+                            
+                            # 简单的重试逻辑：如果点击后 HTML 没变，可能没点上
+                            # 这里简单处理，主要靠 wait_time
+                            logger.info(f"Clicked next page button, waiting for content...")
+                        else:
+                            logger.warning(f"Next button not found with XPath: {next_xpath}")
+                            break
+                    except Exception as e:
+                        logger.error(f"Drission click pagination failed: {e}")
+                        break
+                else:
+                    break
+
+            return {
+                "status": "success",
+                "html": last_html,
+                "items": all_items,
+                "count": len(all_items)
+            }
+
+        except Exception as e:
+            logger.error(f"Drission session scrape failed: {e}")
+            return {"status": "failed", "error": str(e)}
+        finally:
+            if tab:
+                try:
+                    tab.close()
+                except:
+                    pass
 
     async def _scrape_list_session_internal(
         self,
