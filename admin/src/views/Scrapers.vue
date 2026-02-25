@@ -62,7 +62,7 @@
         </el-table-column>
         <el-table-column label="关联规则" min-width="150">
            <template #default="{ row }">
-             <el-tag v-if="row.rule_id" type="success">{{ getRuleName(row.rule_id) }}</el-tag>
+             <el-tag v-if="row.rule_id" type="success" style="font-size: 13px;">{{ getRuleName(row.rule_id) }}</el-tag>
              <span v-else class="text-gray">-</span>
            </template>
         </el-table-column>
@@ -422,7 +422,11 @@
                 </el-form-item>
 
                 <el-form-item label="User-Agent">
-                  <el-input v-model="form.params.user_agent" placeholder="自定义 User-Agent 字符串，不填则使用默认" clearable />
+                  <el-input 
+                    v-model="form.params.user_agent" 
+                    :placeholder="defaultUA ? '系统默认: ' + defaultUA : '自定义 User-Agent 字符串，不填则使用系统默认'" 
+                    clearable 
+                  />
                 </el-form-item>
 
                 <el-form-item label="窗口尺寸">
@@ -904,7 +908,7 @@ import { ref, onMounted, reactive, computed, watch, onUnmounted, onActivated } f
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick } from '@element-plus/icons-vue'
-import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules } from '@/api'
+import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs } from '@/api'
 
 const scrapers = ref([])
 const rules = ref([])
@@ -918,6 +922,19 @@ const saveRunningStatus = () => {
 
 const activeTab = ref('basic')
 const proxyGroups = ref([])
+const defaultUA = ref('')
+
+const loadConfigs = async () => {
+    try {
+        const configs = await getConfigs()
+        const uaConfig = configs.find(c => c.key === 'user_agent')
+        if (uaConfig) {
+            defaultUA.value = uaConfig.value
+        }
+    } catch (error) {
+        console.error('Failed to load system configs:', error)
+    }
+}
 
 const loadProxyGroups = async () => {
     try {
@@ -1953,11 +1970,13 @@ const handleIframeMessage = (event) => {
 
 onMounted(() => {
     window.addEventListener('message', handleIframeMessage)
+    loadConfigs()
 })
 
 onActivated(() => {
     fetchData()
     loadProxyGroups()
+    loadConfigs()
 })
 
 onUnmounted(() => {

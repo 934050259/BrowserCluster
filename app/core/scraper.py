@@ -917,7 +917,8 @@ class Scraper:
                 no_images=params.get("no_images", False),
                 no_css=params.get("no_css", False),
                 proxy=params.get("proxy"),
-                proxy_pool_group=params.get("proxy_pool_group")
+                proxy_pool_group=params.get("proxy_pool_group"),
+                user_agent=params.get("user_agent")
             )
             
             # 在新标签页中访问 URL，并设置超时
@@ -1049,7 +1050,8 @@ class Scraper:
         no_images: bool = False,
         no_css: bool = False,
         proxy: dict = None,
-        proxy_pool_group: str = None
+        proxy_pool_group: str = None,
+        user_agent: str = None
     ) -> str:
         """
         使用 DrissionPage 获取渲染后的 HTML
@@ -1075,7 +1077,8 @@ class Scraper:
             no_images,
             no_css,
             proxy,
-            proxy_pool_group
+            proxy_pool_group,
+            user_agent
         )
 
     def _sync_validate_with_drission(
@@ -1087,7 +1090,8 @@ class Scraper:
         no_images: bool = False,
         no_css: bool = False,
         proxy: dict = None,
-        proxy_pool_group: str = None
+        proxy_pool_group: str = None,
+        user_agent: str = None
     ) -> str:
         """同步执行 DrissionPage 获取页面内容"""
         tab = None
@@ -1097,7 +1101,8 @@ class Scraper:
                 no_images=no_images, 
                 no_css=no_css,
                 proxy=proxy,
-                proxy_pool_group=proxy_pool_group
+                proxy_pool_group=proxy_pool_group,
+                user_agent=user_agent
             )
             
             # 访问页面

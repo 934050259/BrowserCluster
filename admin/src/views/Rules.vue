@@ -38,7 +38,7 @@
           </el-input>
         </el-form-item>
 
-        <el-form-item label="解析类型" style="width: 180px;">
+        <el-form-item label="解析类型" style="width: 220px;">
           <el-select v-model="filterForm.parser_type" placeholder="选择解析类型" clearable @change="handleFilter">
             <el-option label="智能解析 (GNE)" value="gne" />
             <el-option label="大模型提取 (LLM)" value="llm" />
@@ -46,7 +46,7 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item label="提取模式" style="width: 150px;">
+        <el-form-item label="提取模式" style="width: 180px;">
           <el-select v-model="filterForm.mode" placeholder="选择模式" clearable @change="handleFilter">
             <el-option label="详情模式" value="detail" />
             <el-option label="列表模式" value="list" />
@@ -401,6 +401,15 @@
                       </div>
                     </el-form-item>
                   </el-col>
+                  <el-col :span="24">
+                    <el-form-item label="User-Agent">
+                      <el-input 
+                        v-model="form.user_agent" 
+                        :placeholder="defaultUA ? '系统默认: ' + defaultUA : '自定义 User-Agent 字符串，不填则使用系统默认'" 
+                        clearable 
+                      />
+                    </el-form-item>
+                  </el-col>
                 </el-row>
               </div>
 
@@ -622,10 +631,23 @@ import { ref, onMounted, reactive, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, MagicStick, Connection, Search, Timer, Monitor, Setting, Warning, InfoFilled, Collection, FolderOpened } from '@element-plus/icons-vue'
-import { getRules, createRule, updateRule, deleteRule, getProxyStats } from '@/api'
+import { getRules, createRule, updateRule, deleteRule, getProxyStats, getConfigs } from '@/api'
 
 const rules = ref([])
 const loading = ref(false)
+const defaultUA = ref('')
+
+const loadConfigs = async () => {
+  try {
+    const configs = await getConfigs()
+    const uaConfig = configs.find(c => c.key === 'user_agent')
+    if (uaConfig) {
+      defaultUA.value = uaConfig.value
+    }
+  } catch (error) {
+    console.error('Failed to load system configs:', error)
+  }
+}
 const route = useRoute()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -677,6 +699,7 @@ const form = reactive({
   
   // 浏览器特征配置
   engine: 'playwright',
+  user_agent: '',
   proxy_pool_group: null,
   wait_for: 'networkidle',
   timeout: 30000,
@@ -968,6 +991,7 @@ watch(() => route.query, () => {
 onMounted(() => {
   fetchRules()
   checkRouteParams()
+  loadConfigs()
 })
 </script>
 

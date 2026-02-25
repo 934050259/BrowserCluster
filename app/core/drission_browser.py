@@ -201,7 +201,7 @@ class DrissionManager:
     def last_used_time(self):
         return self._last_used_time
 
-    def create_tab(self, url: str = None, no_images: bool = False, no_css: bool = False, proxy: dict = None, proxy_pool_group: str = None):
+    def create_tab(self, url: str = None, no_images: bool = False, no_css: bool = False, proxy: dict = None, proxy_pool_group: str = None, user_agent: str = None):
         """
         线程安全地创建一个新标签页
         
@@ -211,6 +211,7 @@ class DrissionManager:
             no_css: 是否禁用 CSS 加载
             proxy: 手动代理配置
             proxy_pool_group: 代理池分组
+            user_agent: User-Agent 字符串
         """
         with self._lock:
             # 如果提供了代理，且当前浏览器已启动，由于 DrissionPage 单例模式限制，
@@ -218,22 +219,24 @@ class DrissionManager:
             # 这里采取简单策略：如果浏览器未启动，或者需要切换代理，则重新初始化。
             
             target_proxy = proxy
-            if not target_proxy and proxy_pool_group:
-                # 注意：这里在同步上下文中调用异步方法需要特殊处理
-                # 由于 get_random_proxy 是异步的，我们在 create_tab 中难以直接 await
-                # 建议在调用 create_tab 之前就已经解析好代理。
-                # 但为了兼容性，如果没解析，我们尝试在外部解析。
-                pass
-
+            
             # 确保浏览器已初始化
             if not self._page:
-                self.get_browser({"proxy": target_proxy})
+                self.get_browser({"proxy": target_proxy, "user_agent": user_agent})
             
             # 更新最后使用时间，防止被空闲检查关闭
             self._last_used_time = time.time()
             
             # 创建新标签页
             tab = self._page.new_tab(url)
+
+            # 设置该标签页的 User-Agent (DrissionPage 支持为单个标签页设置 UA)
+            if user_agent:
+                try:
+                    tab.set.user_agent(user_agent)
+                    logger.info(f"Set custom User-Agent for tab: {user_agent}")
+                except Exception as e:
+                    logger.warning(f"Failed to set custom User-Agent for tab: {e}")
             
             # 动态设置资源拦截
             if no_images:

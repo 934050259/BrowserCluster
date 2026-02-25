@@ -107,7 +107,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="status" label="状态" width="120" align="center">
+        <el-table-column prop="status" label="状态" width="110" align="center">
           <template #default="{ row }">
             <div class="status-container">
               <el-tag :type="getStatusType(row.status)" size="default" effect="dark" class="status-tag">
@@ -120,7 +120,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="执行统计" width="150">
+        <el-table-column label="执行统计" width="160">
           <template #default="{ row }">
             <div class="stats-group">
               <div class="stat-item timing-row">
@@ -666,6 +666,15 @@
                 </div>
               </el-form-item>
 
+              <el-form-item label="User-Agent">
+                <el-input 
+                  v-model="scrapeForm.params.user_agent" 
+                  :placeholder="defaultUA ? '系统默认: ' + defaultUA : '自定义 User-Agent 字符串，不填则使用系统默认'" 
+                  clearable 
+                  :disabled="!!selectedRuleId"
+                />
+              </el-form-item>
+
               <div class="feature-settings">
                 <div class="feature-item">
                   <div class="feature-info">
@@ -1196,7 +1205,7 @@ import { ref, onMounted, computed, watch, onActivated } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Delete, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right, Document, UploadFilled, MagicStick, Warning, ArrowDown, RefreshRight } from '@element-plus/icons-vue'
-import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch, scrapeBatch, getRulesByDomain, getProxyStats } from '../api'
+import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch, scrapeBatch, getRulesByDomain, getProxyStats, getConfigs } from '../api'
 import dayjs from 'dayjs'
 
 const loading = ref(false)
@@ -1208,6 +1217,19 @@ const pageSize = ref(10)
 const total = ref(0)
 const activeTab = ref('info')
 const proxyGroups = ref([])
+const defaultUA = ref('')
+
+const loadConfigs = async () => {
+  try {
+    const configs = await getConfigs()
+    const uaConfig = configs.find(c => c.key === 'user_agent')
+    if (uaConfig) {
+      defaultUA.value = uaConfig.value
+    }
+  } catch (error) {
+    console.error('Failed to load system configs:', error)
+  }
+}
 
 const loadProxyGroups = async () => {
   try {
@@ -2045,10 +2067,11 @@ onActivated(() => {
   currentPage.value = 1
   loadTasks()
   loadProxyGroups()
+  loadConfigs()
 })
 
 onMounted(() => {
-  // 逻辑已移至 onActivated
+  loadConfigs()
 })
 </script>
 
@@ -2631,7 +2654,7 @@ onMounted(() => {
 
 .status-tag {
   border: none;
-  min-width: 90px;
+  min-width: 80px;
   border-radius: 20px;
 }
 

@@ -502,6 +502,15 @@
                 </div>
               </el-form-item>
 
+              <el-form-item label="User-Agent">
+                <el-input 
+                  v-model="form.params.user_agent" 
+                  :placeholder="defaultUA ? '系统默认: ' + defaultUA : '自定义 User-Agent 字符串，不填则使用系统默认'" 
+                  clearable 
+                  :disabled="!!selectedRuleId"
+                />
+              </el-form-item>
+
               <div class="feature-settings">
                 <div class="feature-item">
                   <div class="feature-info">
@@ -823,7 +832,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search, Edit, Delete, CaretRight, Link, InfoFilled, Connection, MagicStick, Monitor, Setting, Timer, Warning, QuestionFilled, ArrowDown, CircleCheckFilled, List, View, Document, Promotion } from '@element-plus/icons-vue'
-import { getSchedules, createSchedule, updateSchedule, deleteSchedule, toggleSchedule, runScheduleNow, getRulesByDomain, getTasks, getTask, getProxyStats } from '../api'
+import { getSchedules, createSchedule, updateSchedule, deleteSchedule, toggleSchedule, runScheduleNow, getRulesByDomain, getTasks, getTask, getProxyStats, getConfigs } from '../api'
 import dayjs from 'dayjs'
 
 const loading = ref(false)
@@ -834,6 +843,19 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const router = useRouter()
 const proxyGroups = ref([])
+const defaultUA = ref('')
+
+const loadConfigs = async () => {
+  try {
+    const configs = await getConfigs()
+    const uaConfig = configs.find(c => c.key === 'user_agent')
+    if (uaConfig) {
+      defaultUA.value = uaConfig.value
+    }
+  } catch (error) {
+    console.error('Failed to load system configs:', error)
+  }
+}
 
 const loadProxyGroups = async () => {
   try {
@@ -1213,10 +1235,12 @@ const openCreateDialog = () => {
       is_fullscreen: false,
       block_images: false,
       block_media: false,
+      user_agent: '',
       viewport: {
         width: 1920,
         height: 1080
       },
+      user_agent: '',
       parser: '',
       parser_config: {
         fields: ['title', 'content']
@@ -1314,6 +1338,7 @@ const handleEdit = (row) => {
         width: 1920,
         height: 1080
       },
+      user_agent: '',
       parser: '',
       parser_config: {
         fields: ['title', 'content']
@@ -1610,9 +1635,16 @@ const formatInterval = (seconds) => {
   return `${seconds} 秒`
 }
 
+onActivated(() => {
+  loadSchedules()
+  loadProxyGroups()
+  loadConfigs()
+})
+
 onMounted(() => {
   loadSchedules()
   loadProxyGroups()
+  loadConfigs()
 })
 </script>
 
