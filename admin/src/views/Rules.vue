@@ -627,7 +627,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive, watch, nextTick } from 'vue'
+import { ref, onMounted, reactive, watch, nextTick, onActivated } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, MagicStick, Connection, Search, Timer, Monitor, Setting, Warning, InfoFilled, Collection, FolderOpened } from '@element-plus/icons-vue'
@@ -987,6 +987,12 @@ const checkRouteParams = () => {
 watch(() => route.query, () => {
   checkRouteParams()
 }, { deep: true })
+
+onActivated(() => {
+  fetchRules()
+  checkRouteParams()
+  loadConfigs()
+})
 
 onMounted(() => {
   fetchRules()

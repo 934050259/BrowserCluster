@@ -828,7 +828,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search, Edit, Delete, CaretRight, Link, InfoFilled, Connection, MagicStick, Monitor, Setting, Timer, Warning, QuestionFilled, ArrowDown, CircleCheckFilled, List, View, Document, Promotion } from '@element-plus/icons-vue'
@@ -906,6 +906,7 @@ const form = ref({
     is_fullscreen: false,
     block_images: false,
     block_media: false,
+    user_agent: '',
     viewport: {
       width: 1920,
       height: 1080
@@ -1240,7 +1241,6 @@ const openCreateDialog = () => {
         width: 1920,
         height: 1080
       },
-      user_agent: '',
       parser: '',
       parser_config: {
         fields: ['title', 'content']
