@@ -774,6 +774,13 @@
                 <el-tag size="small" effect="plain">{{ currentTask.params?.engine || 'playwright' }}</el-tag>
               </el-descriptions-item>
 
+              <el-descriptions-item label="User-Agent" :span="2">
+                <div class="ua-display-cell">
+                  <code class="ua-text" v-if="currentTask.params?.user_agent">{{ currentTask.params.user_agent }}</code>
+                  <el-tag v-else type="info" size="small" effect="plain">系统默认</el-tag>
+                </div>
+              </el-descriptions-item>
+
               <el-descriptions-item>
                 <template #label>
                   <div class="label-box"><el-icon><Share /></el-icon><span>代理信息</span></div>
@@ -1689,6 +1696,22 @@ onMounted(() => {
   font-weight: 600;
   border: 1px solid #e2e8f0;
 }
+.ua-display-cell {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ua-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background-color: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #475569;
+  word-break: break-all;
+  display: block;
+}
+
 .schedules-container {
   padding: 20px;
 }

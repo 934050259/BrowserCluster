@@ -353,6 +353,15 @@
                     <el-tag size="small" effect="plain" class="engine-tag">{{ currentTask.params?.engine || 'playwright' }}</el-tag>
                   </div>
                 </el-descriptions-item>
+                <el-descriptions-item :span="2">
+                  <template #label>
+                    <div class="label-box"><el-icon><User /></el-icon><span>User-Agent</span></div>
+                  </template>
+                  <div class="ua-display-cell">
+                    <code class="ua-text" v-if="currentTask.params?.user_agent">{{ currentTask.params.user_agent }}</code>
+                    <el-tag v-else type="info" size="small" effect="plain">系统默认</el-tag>
+                  </div>
+                </el-descriptions-item>
                 <el-descriptions-item>
                   <template #label>
                     <div class="label-box"><el-icon><MagicStick /></el-icon><span>解析模式</span></div>
@@ -892,7 +901,7 @@ watch(scheduleId, (newId) => {
   border-radius: 4px;
   background-color: #f0f2f5;
   border: none;
-  color: #606266;
+  font-size: 13px;
 }
 
 /* Filter Section */
@@ -995,7 +1004,6 @@ watch(scheduleId, (newId) => {
 .url-text {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .copy-btn-hover {
@@ -1200,6 +1208,22 @@ tr:hover .copy-btn-hover {
   padding: 24px;
 }
 
+.ua-display-cell {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ua-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background-color: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #475569;
+  word-break: break-all;
+  display: block;
+}
+
 .modern-descriptions :deep(.el-descriptions__label) {
   width: 140px;
   background-color: #f9fbff !important;
@@ -1290,6 +1314,7 @@ tr:hover .copy-btn-hover {
 }
 
 .section-title {
+  margin: 5px;
   font-size: 15px;
   font-weight: 600;
   color: #303133;

@@ -906,6 +906,15 @@
                   {{ currentTask.params?.engine || 'playwright' }}
                 </el-tag>
               </el-descriptions-item>
+              <el-descriptions-item :span="2">
+                <template #label>
+                  <div class="label-box"><el-icon><User /></el-icon><span>User-Agent</span></div>
+                </template>
+                <div class="ua-display-cell">
+                  <code class="ua-text" v-if="currentTask.params?.user_agent">{{ currentTask.params.user_agent }}</code>
+                  <el-tag v-else type="info" size="small" effect="plain">系统默认</el-tag>
+                </div>
+              </el-descriptions-item>
               <el-descriptions-item>
                 <template #label>
                   <div class="label-box"><el-icon><Lock /></el-icon><span>反检测</span></div>
@@ -2567,6 +2576,22 @@ onMounted(() => {
   padding-left: 24px;
   padding-right: 24px;
   font-weight: 600;
+}
+
+.ua-display-cell {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ua-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background-color: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #475569;
+  word-break: break-all;
+  display: block;
 }
 
 .task-info-cell {
