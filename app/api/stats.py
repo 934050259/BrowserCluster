@@ -125,6 +125,25 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
     ]
     history_data = list(mongo.tasks.aggregate(history_pipeline))
 
+    # 4.1 获取今日分时统计 (24 小时)
+    today_hourly_pipeline = [
+        {
+            "$match": {
+                "created_at": {"$gte": today_start, "$lt": tomorrow_start}
+            }
+        },
+        {
+            "$group": {
+                "_id": {"$dateToString": {"format": "%H:00", "date": "$created_at"}},
+                "total": {"$sum": 1},
+                "success": {"$sum": {"$cond": [{"$eq": ["$status", "success"]}, 1, 0]}},
+                "failed": {"$sum": {"$cond": [{"$eq": ["$status", "failed"]}, 1, 0]}}
+            }
+        },
+        {"$sort": {"_id": 1}}
+    ]
+    today_hourly_data = list(mongo.tasks.aggregate(today_hourly_pipeline))
+
     # 5. 获取节点统计
     all_nodes = await node_manager.get_all_nodes()
     active_nodes = [n for n in all_nodes if n.get('status') == 'running']
@@ -152,6 +171,7 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
         trends=trends,
         queue=queue_stats,
         history=history_data,
+        today_hourly=today_hourly_data,
         nodes=nodes_stats,
         system_load=system_load
     )

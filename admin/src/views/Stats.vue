@@ -121,68 +121,171 @@ const updateChart = () => {
   }
   if (!chart) return
   
-  const history = stats.value.history || []
-  const dates = history.map(item => item._id)
-  const successData = history.map(item => item.success)
-  const failedData = history.map(item => item.failed)
-  const totalData = history.map(item => item.total)
+  let option = {}
+  
+  if (chartTimeRange.value === 'today') {
+    // 今日数据展示为柱状图 (支持分时或总量)
+    const hourly = stats.value.today_hourly || []
+    const today = stats.value.today
+    
+    if (hourly.length > 0) {
+      // 如果有分时数据，展示分时柱状图
+      const hours = hourly.map(item => item._id)
+      const successData = hourly.map(item => item.success)
+      const failedData = hourly.map(item => item.failed)
+      const totalData = hourly.map(item => item.total)
 
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' }
-    },
-    legend: {
-      data: ['成功', '失败', '总计'],
-      bottom: 0
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '10%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      boundaryGap: false,
-      data: dates.length > 0 ? dates : ['无数据'],
-      axisTick: { alignWithLabel: true }
-    },
-    yAxis: { type: 'value' },
-    series: [
-      {
-        name: '成功',
-        type: 'line',
-        smooth: true,
-        data: successData,
-        itemStyle: { color: '#67C23A' },
-        areaStyle: { opacity: 0.1 }
-      },
-      {
-        name: '失败',
-        type: 'line',
-        smooth: true,
-        data: failedData,
-        itemStyle: { color: '#F56C6C' },
-        areaStyle: { opacity: 0.1 }
-      },
-      {
-        name: '总计',
-        type: 'line',
-        smooth: true,
-        data: totalData,
-        itemStyle: { color: '#409EFF' }
+      option = {
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        legend: {
+          data: ['成功', '失败', '总计'],
+          bottom: 0
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '10%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'category',
+          data: hours,
+          axisTick: { alignWithLabel: true }
+        },
+        yAxis: { type: 'value' },
+        series: [
+          {
+            name: '成功',
+            type: 'bar',
+            stack: 'status',
+            data: successData,
+            itemStyle: { color: '#67C23A' }
+          },
+          {
+            name: '失败',
+            type: 'bar',
+            stack: 'status',
+            data: failedData,
+            itemStyle: { color: '#F56C6C' }
+          },
+          {
+            name: '总计',
+            type: 'line',
+            data: totalData,
+            itemStyle: { color: '#409EFF' },
+            smooth: true
+          }
+        ]
       }
-    ]
+    } else {
+      // 降级为总量柱状图
+      option = {
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '10%',
+          containLabel: true
+        },
+        xAxis: {
+          type: 'category',
+          data: ['任务总量', '成功处理', '失败记录'],
+          axisTick: { alignWithLabel: true }
+        },
+        yAxis: { type: 'value' },
+        series: [
+          {
+            name: '数量',
+            type: 'bar',
+            barWidth: '40%',
+            data: [
+              { value: today.total, itemStyle: { color: '#409EFF' } },
+              { value: today.success, itemStyle: { color: '#67C23A' } },
+              { value: today.failed, itemStyle: { color: '#F56C6C' } }
+            ],
+            label: {
+              show: true,
+              position: 'top'
+            }
+          }
+        ]
+      }
+    }
+  } else {
+    // 近一周数据展示为折线图
+    const history = stats.value.history || []
+    const dates = history.map(item => item._id)
+    const successData = history.map(item => item.success)
+    const failedData = history.map(item => item.failed)
+    const totalData = history.map(item => item.total)
+
+    option = {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'cross' }
+      },
+      legend: {
+        data: ['成功', '失败', '总计'],
+        bottom: 0
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '10%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: dates.length > 0 ? dates : ['无数据'],
+        axisTick: { alignWithLabel: true }
+      },
+      yAxis: { type: 'value' },
+      series: [
+        {
+          name: '成功',
+          type: 'line',
+          smooth: true,
+          data: successData,
+          itemStyle: { color: '#67C23A' },
+          areaStyle: { opacity: 0.1 }
+        },
+        {
+          name: '失败',
+          type: 'line',
+          smooth: true,
+          data: failedData,
+          itemStyle: { color: '#F56C6C' },
+          areaStyle: { opacity: 0.1 }
+        },
+        {
+          name: '总计',
+          type: 'line',
+          smooth: true,
+          data: totalData,
+          itemStyle: { color: '#409EFF' }
+        }
+      ]
+    }
   }
-  chart.setOption(option)
+  
+  chart.setOption(option, true)
 }
 
 onMounted(() => {
   statsStore.fetchStats().then(() => updateChart())
-  // 在统计页面，我们可以选择增加轮询频率，或者直接使用 store 的全局轮询
-  // 这里我们观察 store 的变化来更新图表
   window.addEventListener('resize', () => chart?.resize())
+})
+
+// 监听时间范围变化
+watch(chartTimeRange, () => {
+  updateChart()
 })
 
 watch(() => statsStore.stats, () => {

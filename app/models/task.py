@@ -168,5 +168,6 @@ class StatsResponse(BaseModel):
     trends: Dict[str, float]  # 趋势百分比
     queue: Dict[str, Any]  # 队列统计数据
     history: List[Dict[str, Any]]  # 历史趋势数据
+    today_hourly: Optional[List[Dict[str, Any]]] = None  # 今日分时数据
     nodes: Optional[Dict[str, Any]] = None  # 节点统计数据
     system_load: Optional[float] = 0.0  # 系统负载 (0-100)
