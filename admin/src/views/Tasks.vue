@@ -656,6 +656,11 @@
                     />
                   </el-form-item>
                 </el-col>
+                <el-col :span="12">
+                  <el-form-item label="额外等待 (ms)">
+                    <el-input-number v-model="scrapeForm.params.wait_time" :min="0" :step="500" style="width: 100%" :disabled="!!selectedRuleId" />
+                  </el-form-item>
+                </el-col>
               </el-row>
 
               <el-form-item label="视口尺寸 (分辨率)">
@@ -1352,7 +1357,7 @@ const applyMatchedRule = (rule, silent = false) => {
 
   // 应用浏览器特征和高级配置
   const syncFields = [
-    "engine", "wait_for", "timeout", "viewport", "stealth", 
+    "engine", "wait_for", "wait_time", "timeout", "viewport", "stealth", 
     "save_html", "return_cookies", "screenshot", "is_fullscreen", "block_images",
     "intercept_apis", "intercept_continue", "proxy", "cookies",
     "storage_type", "mongo_collection", "oss_path"

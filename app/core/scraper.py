@@ -139,6 +139,14 @@ class Scraper:
         params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """DrissionPage 内部实现：支持点击翻页的会话抓取 (同步实现)"""
+        # 校验 DrissionPage 代理：不支持账密认证
+        proxy_config = params.get("proxy")
+        if proxy_config and (proxy_config.get("username") or proxy_config.get("password")):
+            return {
+                "status": "failed", 
+                "error": "DrissionPage 引擎目前不支持带账密认证的代理，请切换到 Playwright 引擎或使用无须认证的代理。"
+            }
+
         max_pages = params.get("max_pages", 1)
         all_items = []
         last_html = ""
@@ -664,10 +672,13 @@ class Scraper:
         engine = params.get("engine") or settings.browser_engine
         
         if engine == "drissionpage":
-            # 检查代理设置，DrissionPage 目前对带账密的代理支持有限（单例模式下难以动态切换）
+            # 校验 DrissionPage 代理：不支持账密认证
             proxy_config = params.get("proxy")
             if proxy_config and (proxy_config.get("username") or proxy_config.get("password")):
-                logger.warning("DrissionPage engine currently has limited support for authenticated proxies in singleton mode. Reverting to Playwright or proceed without authentication if it fails.")
+                return {
+                    "status": "failed",
+                    "error": "DrissionPage 引擎目前不支持带账密认证的代理，请切换到 Playwright 引擎或使用无须认证的代理。"
+                }
             
             return await self._scrape_with_drission(url, params, node_id)
         else:
@@ -1017,6 +1028,14 @@ class Scraper:
                     "password": pool_proxy.password
                 }
                 logger.info(f"Using proxy from pool group '{proxy_pool_group}' for DrissionPage: {pool_proxy.server}")
+
+        # 校验 DrissionPage 代理：不支持账密认证
+        proxy_config = params.get("proxy")
+        if proxy_config and (proxy_config.get("username") or proxy_config.get("password")):
+            return {
+                "status": "failed",
+                "error": "DrissionPage 引擎目前不支持带账密认证的代理，请切换到 Playwright 引擎或使用无须认证的代理。"
+            }
         
         result = await asyncio.to_thread(self._sync_scrape_with_drission, url, params, node_id)
         
@@ -1101,13 +1120,21 @@ class Scraper:
             else:
                 logger.warning("Cloudflare challenge wait timeout.")
             
-            # 等待特定元素 (如果指定)
+            # 获取等待配置
             selector = params.get("selector")
+            wait_time = params.get("wait_time", 3000)
+
+            # 等待特定元素 (如果指定)
             if selector:
                 try:
                     tab.ele(selector, timeout=timeout_s)
                 except:
                     logger.warning(f"Selector {selector} not found within timeout")
+            
+            # 额外等待时间 (scraper.py)
+            if wait_time > 0:
+                logger.info(f"DrissionPage extra waiting {wait_time}ms...")
+                time.sleep(wait_time / 1000)
             
             # 获取内容
             # 即使 save_html 为 False，如果需要解析 (parser 不为空)，也需要获取 HTML
@@ -1226,6 +1253,10 @@ class Scraper:
         user_agent: str = None
     ) -> str:
         """同步执行 DrissionPage 获取页面内容"""
+        # 校验 DrissionPage 代理：不支持账密认证
+        if proxy and (proxy.get("username") or proxy.get("password")):
+            raise ValueError("DrissionPage 引擎目前不支持带账密认证的代理，请切换到 Playwright 引擎或使用无须认证的代理。")
+            
         tab = None
         try:
             # 使用线程安全的方法创建标签页

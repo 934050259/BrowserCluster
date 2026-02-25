@@ -393,6 +393,11 @@
                     </el-form-item>
                   </el-col>
                   <el-col :span="12">
+                    <el-form-item label="额外等待 (ms)">
+                      <el-input-number v-model="form.wait_time" :min="0" :step="500" style="width: 100%" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
                     <el-form-item label="视口尺寸">
                       <div class="viewport-input">
                         <el-input-number v-model="form.viewport.width" :min="320" placeholder="宽" controls-position="right" style="width: 90px" />
@@ -702,6 +707,7 @@ const form = reactive({
   user_agent: '',
   proxy_pool_group: null,
   wait_for: 'networkidle',
+  wait_time: 3000,
   timeout: 30000,
   viewport: { width: 1280, height: 720 },
   stealth: true,
@@ -765,11 +771,11 @@ const handleAdd = () => {
     domain: '',
     parser_type: 'gne',
     parser_config: { mode: 'detail' },
-    
-    // 浏览器特征配置
     engine: 'playwright',
+    user_agent: '',
     proxy_pool_group: null,
     wait_for: 'networkidle',
+    wait_time: 3000,
     timeout: 30000,
     viewport: { width: 1280, height: 720 },
     stealth: true,
@@ -809,6 +815,7 @@ const handleEdit = (row) => {
   
   // 确保嵌套对象存在
   if (!rowData.viewport) rowData.viewport = { width: 1280, height: 720 }
+  if (rowData.wait_time === undefined) rowData.wait_time = 3000
   if (!rowData.proxy) rowData.proxy = { server: '', username: '', password: '' }
   if (rowData.proxy_pool_group === undefined) rowData.proxy_pool_group = null
   if (!rowData.intercept_apis) rowData.intercept_apis = []
@@ -1101,9 +1108,10 @@ onMounted(() => {
 .tab-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  padding: 4px 0;
+  gap: 12px;
+  font-weight: 600;
+  font-size: 18px; /* 进一步增大字体 */
+  padding: 8px 0;
 }
 
 .tab-content {
