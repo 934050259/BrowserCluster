@@ -356,3 +356,8 @@ export const getScraperData = async (id, params) => {
   const response = await api.get(`/scrapers/${id}/data`, { params })
   return response.data
 }
+
+export const getScraperExecution = async (id) => {
+  const response = await api.get(`/scrapers/executions/${id}`)
+  return response.data
+}

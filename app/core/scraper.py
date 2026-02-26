@@ -150,7 +150,9 @@ class Scraper:
         max_pages = params.get("max_pages", 1)
         all_items = []
         last_html = ""
+        result_pages = []
         tab = None
+        start_time = time.time()
         
         try:
             # 1. 创建标签页并初始化
@@ -177,6 +179,13 @@ class Scraper:
                 # 获取当前页面 HTML
                 html_content = tab.html
                 last_html = html_content
+                
+                # 截图 (如果配置)
+                screenshot = None
+                if params.get("screenshot", False):
+                    # 获取 base64 截图
+                    screenshot = tab.get_screenshot(base64=True)
+
                 tree = lxml_html.fromstring(html_content)
                 
                 # 提取列表项
@@ -204,6 +213,17 @@ class Scraper:
                         page_items.append(item)
                 
                 all_items.extend(page_items)
+                
+                # 记录页面信息
+                result_pages.append({
+                    "page_num": page_num,
+                    "url": tab.url,
+                    "html": html_content,
+                    "screenshot": screenshot,
+                    "items": page_items,
+                    "count": len(page_items)
+                })
+                
                 logger.info(f"Page {page_num} extracted {len(page_items)} items")
 
                 # 如果不是最后一页，尝试翻页
@@ -239,7 +259,9 @@ class Scraper:
                 "status": "success",
                 "html": last_html,
                 "items": all_items,
-                "count": len(all_items)
+                "count": len(all_items),
+                "pages": result_pages,
+                "duration": time.time() - start_time
             }
 
         except Exception as e:
@@ -263,9 +285,11 @@ class Scraper:
         params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Playwright 内部实现：支持点击翻页的会话抓取"""
+        start_time = time.time()
         max_pages = params.get("max_pages", 1)
         all_items = []
         last_html = ""
+        result_pages = []
         
         page = None
         context = None
@@ -327,9 +351,16 @@ class Scraper:
             for page_num in range(1, max_pages + 1):
                 logger.info(f"Scraping page {page_num} in session...")
                 
-                # 获取当前页面 HTML
+                # 获取当前页面内容
                 html_content = await page.content()
                 last_html = html_content
+                
+                # 截图 (如果配置)
+                screenshot = None
+                if params.get("screenshot", False):
+                    screenshot = await page.screenshot(type="png", full_page=params.get("is_fullscreen", False))
+                    screenshot = base64.b64encode(screenshot).decode('utf-8')
+
                 tree = lxml_html.fromstring(html_content)
                 
                 # 提取列表项
@@ -357,6 +388,17 @@ class Scraper:
                         page_items.append(item)
                 
                 all_items.extend(page_items)
+                
+                # 记录页面信息
+                result_pages.append({
+                    "page_num": page_num,
+                    "url": page.url,
+                    "html": html_content,
+                    "screenshot": screenshot,
+                    "items": page_items,
+                    "count": len(page_items)
+                })
+                
                 logger.info(f"Page {page_num} extracted {len(page_items)} items")
 
                 # 如果不是最后一页，尝试翻页
@@ -399,7 +441,8 @@ class Scraper:
                 "status": "success",
                 "html": last_html,
                 "items": all_items,
-                "count": len(all_items)
+                "count": len(all_items),
+                "pages": result_pages
             }
 
         except Exception as e:
@@ -437,7 +480,9 @@ class Scraper:
         max_pages = params.get("max_pages", 1)
         next_xpath = pagination_next_xpath or params.get("pagination_next_xpath")
         
+        start_time = time.time()
         all_items = []
+        result_pages = []
         current_url = url
         last_html = ""
         
@@ -571,6 +616,23 @@ class Scraper:
                         page_items.append(item)
                 
                 all_items.extend(page_items)
+                
+                # 记录页面信息
+                # 在 legacy 模式下，screenshot 已经在上面的 res 中获取过了 (如果是 playwright)
+                # 如果是 drissionpage，html_content 是直接返回的，可能没带截图
+                current_screenshot = None
+                if engine != "drissionpage" and 'res' in locals():
+                    current_screenshot = res.get("screenshot")
+
+                result_pages.append({
+                    "page_num": page_num,
+                    "url": current_url,
+                    "html": html_content,
+                    "screenshot": current_screenshot,
+                    "items": page_items,
+                    "count": len(page_items)
+                })
+                
                 logger.info(f"Page {page_num} extracted {len(page_items)} items")
                 
                 # 3. 检查是否有下一页
@@ -657,7 +719,9 @@ class Scraper:
             "status": "success",
             "html": last_html,
             "items": all_items,
-            "count": len(all_items)
+            "count": len(all_items),
+            "pages": result_pages,
+            "duration": time.time() - start_time
         }
 
     async def scrape(

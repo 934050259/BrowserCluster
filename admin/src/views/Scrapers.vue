@@ -82,9 +82,8 @@
               <span>正在测试</span>
             </div>
             <el-tooltip v-else-if="row.last_test_status === 'failed'" :content="row.last_test_error" placement="top">
-              <el-tag type="danger" size="small" class="cursor-pointer">
+              <el-tag type="danger">
                 测试失败
-                <el-icon><Warning /></el-icon>
               </el-tag>
             </el-tooltip>
             <el-tag v-else-if="row.last_test_status === 'success'" type="success" size="small">测试通过</el-tag>
@@ -934,26 +933,82 @@
         </div>
       </el-dialog>
 
-      <!-- 抓取结果预览对话框 (移动到外层) -->
+      <!-- 抓取记录列表对话框 -->
       <el-dialog 
         v-model="dataDialogVisible" 
-        :title="`采集数据 - ${currentScraper?.name}`" 
-        width="1000px"
+        :title="`采集记录 - ${currentScraper?.name}`" 
+        width="1100px"
         destroy-on-close
+        class="executions-dialog"
       >
-        <div v-loading="dataLoading">
-          <el-table :data="scraperData" stripe style="width: 100%" height="500">
-            <el-table-column type="index" width="50" label="#" />
-            <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-            <el-table-column prop="link" label="链接" min-width="300" show-overflow-tooltip>
+        <div v-loading="dataLoading" class="dialog-inner">
+          <div class="stats-overview mb-6" v-if="scraperData.length > 0">
+            <div class="stats-grid">
+              <div class="stat-item">
+                <div class="stat-icon bg-blue-100 text-blue-600">
+                  <el-icon><Operation /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-label">总执行次数</div>
+                  <div class="stat-value">{{ dataTotal }}</div>
+                </div>
+              </div>
+              
+              <div class="stat-item">
+                <div class="stat-icon bg-green-100 text-green-600">
+                  <el-icon><MagicStick /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-label">平均提取项</div>
+                  <div class="stat-value text-green-600">{{ avgItems }}</div>
+                </div>
+              </div>
+
+              <div class="stat-item">
+                <div class="stat-icon bg-purple-100 text-purple-600">
+                  <el-icon><Calendar /></el-icon>
+                </div>
+                <div class="stat-info">
+                  <div class="stat-label">最后执行</div>
+                  <div class="stat-value text-purple-600">{{ lastRunTime }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <el-table :data="scraperData" stripe style="width: 100%" height="450" class="execution-table">
+            <el-table-column label="执行时间" min-width="250">
               <template #default="{ row }">
-                <el-link :href="row.link" target="_blank" type="primary">{{ row.link }}</el-link>
+                <div class="time-cell">
+                  <el-icon class="mr-2"><Calendar /></el-icon>
+                  {{ formatTime(row.created_at) }}
+                </div>
               </template>
             </el-table-column>
-            <el-table-column prop="time" label="发布时间" width="150" />
-            <el-table-column prop="created_at" label="采集时间" width="180">
+            <el-table-column prop="page_num" label="页码" width="120" align="center">
               <template #default="{ row }">
-                {{ formatTime(row.created_at) }}
+                <el-tag size="small">
+                  PAGE {{ row.page_num || 1 }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="120" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'success' ? 'success' : 'danger'" size="small" effect="dark">
+                  {{ row.status === 'success' ? 'SUCCESS' : 'FAILED' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="items_count" label="提取项数" width="150" align="center">
+              <template #default="{ row }">
+                <span class="items-count">{{ row.items_count }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="150" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" size="small" plain @click="viewExecutionDetail(row)">
+                  详情预览
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -962,13 +1017,63 @@
             <el-pagination
               v-model:current-page="dataPage"
               v-model:page-size="dataPageSize"
-              :page-sizes="[50, 100, 200]"
+              :page-sizes="[20, 50, 100]"
               layout="total, sizes, prev, pager, next"
               :total="dataTotal"
               @size-change="handleDataSizeChange"
               @current-change="handleDataPageChange"
+              background
             />
           </div>
+        </div>
+      </el-dialog>
+
+      <!-- 单次执行详情对话框 (展示 HTML 和 截图) -->
+      <el-dialog
+        v-model="executionDetailVisible"
+        title="执行详情预览"
+        width="1200px"
+        top="5vh"
+        append-to-body
+      >
+        <div v-if="currentExecution" v-loading="executionLoading">
+          <el-descriptions border :column="2" class="mb-4">
+            <el-descriptions-item label="任务名称">{{ currentExecution.scraper_name }}</el-descriptions-item>
+            <el-descriptions-item label="执行引擎">{{ currentExecution.engine }}</el-descriptions-item>
+            <el-descriptions-item label="起始 URL" :span="2">{{ currentExecution.url }}</el-descriptions-item>
+          </el-descriptions>
+
+          <el-tabs v-model="activeExecutionTab" type="border-card">
+            <el-tab-pane label="页面截图" name="screenshot" v-if="currentExecution.screenshot">
+              <div class="screenshot-preview">
+                <el-image 
+                  :src="`data:image/png;base64,${currentExecution.screenshot}`" 
+                  fit="contain"
+                  :preview-src-list="[`data:image/png;base64,${currentExecution.screenshot}`]"
+                />
+              </div>
+            </el-tab-pane>
+            <el-tab-pane label="页面 HTML" name="html" v-if="currentExecution.html">
+              <el-input 
+                type="textarea" 
+                v-model="currentExecution.html" 
+                :rows="25" 
+                readonly 
+              />
+            </el-tab-pane>
+            <el-tab-pane :label="`提取结果 (${currentExecution.items?.length || 0})`" name="items">
+              <el-table :data="currentExecution.items" border stripe height="500">
+                <el-table-column type="index" width="50" />
+                <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+                <el-table-column prop="link" label="链接" min-width="300" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <el-link :href="row.link" target="_blank" type="primary">{{ row.link }}</el-link>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="time" label="发布时间" width="150" v-if="currentExecution.items?.some(i => i.time)" />
+              </el-table>
+            </el-tab-pane>
+          </el-tabs>
         </div>
       </el-dialog>
   </div>
@@ -979,7 +1084,7 @@ import { ref, onMounted, reactive, computed, watch, onUnmounted, onActivated } f
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick, Loading, Warning } from '@element-plus/icons-vue'
-import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs, getScraperData } from '@/api'
+import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs, getScraperData, getScraperExecution } from '@/api'
 
 const scrapers = ref([])
 const rules = ref([])
@@ -1050,8 +1155,32 @@ const dataLoading = ref(false)
 const scraperData = ref([])
 const dataTotal = ref(0)
 const dataPage = ref(1)
-const dataPageSize = ref(50)
+const dataPageSize = ref(20)
 const currentScraper = ref(null)
+
+// 统计计算
+const avgItems = computed(() => {
+    if (scraperData.value.length === 0) return 0
+    const total = scraperData.value.reduce((acc, row) => acc + (row.items_count || 0), 0)
+    return (total / scraperData.value.length).toFixed(1)
+})
+
+const avgDuration = computed(() => {
+    if (scraperData.value.length === 0) return 0
+    const total = scraperData.value.reduce((acc, row) => acc + (row.duration || 0), 0)
+    return (total / scraperData.value.length).toFixed(2)
+})
+
+const lastRunTime = computed(() => {
+    if (scraperData.value.length === 0) return '-'
+    return formatTime(scraperData.value[0].created_at)
+})
+
+// 单次执行详情相关状态
+const executionDetailVisible = ref(false)
+const executionLoading = ref(false)
+const currentExecution = ref(null)
+const activeExecutionTab = ref('items')
 
 const handleViewData = async (row) => {
     currentScraper.value = row
@@ -1074,6 +1203,29 @@ const fetchScraperData = async () => {
         ElMessage.error('获取采集数据失败')
     } finally {
         dataLoading.value = false
+    }
+}
+
+const viewExecutionDetail = async (row) => {
+    executionDetailVisible.value = true
+    executionLoading.value = true
+    currentExecution.value = null
+    try {
+        const res = await getScraperExecution(row._id)
+        currentExecution.value = res
+        // 根据返回内容自动切换标签
+        if (res.screenshot) {
+            activeExecutionTab.value = 'screenshot'
+        } else if (res.items && res.items.length > 0) {
+            activeExecutionTab.value = 'items'
+        } else {
+            activeExecutionTab.value = 'html'
+        }
+    } catch (error) {
+        ElMessage.error('获取执行详情失败')
+        executionDetailVisible.value = false
+    } finally {
+        executionLoading.value = false
     }
 }
 
@@ -2652,5 +2804,163 @@ onUnmounted(() => {
 
 .status-running .is-loading {
   font-size: 16px;
+}
+
+.preview-items-text {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-tag {
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 4px;
+}
+
+.screenshot-preview {
+  display: flex;
+  justify-content: center;
+  background: #f8fafc;
+  padding: 20px;
+  border-radius: 8px;
+  min-height: 400px;
+}
+
+.screenshot-preview .el-image {
+  max-width: 100%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* 采集记录优化样式 */
+.executions-dialog :deep(.el-dialog__body) {
+  padding: 24px 30px 40px;
+  background-color: #fcfdfe;
+}
+
+.dialog-inner {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.stats-overview {
+  width: 100%;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+.stat-item {
+  background: #ffffff;
+  border: 1px solid #edf2f7;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+  box-sizing: border-box;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.stat-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-color: #e2e8f0;
+}
+
+.stat-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.stat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #718096;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 20px;
+  color: #2d3748;
+  line-height: 1;
+}
+
+/* Tailwind-like colors */
+.bg-blue-100 { background-color: #ebf8ff; }
+.text-blue-600 { color: #3182ce; }
+.bg-green-100 { background-color: #f0fff4; }
+.text-green-600 { color: #38a169; }
+.bg-orange-100 { background-color: #fffaf0; }
+.text-orange-600 { color: #dd6b20; }
+.bg-purple-100 { background-color: #faf5ff; }
+.text-purple-600 { color: #805ad5; }
+
+.execution-table {
+  width: 100% !important;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #edf2f7;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+}
+
+.execution-table :deep(.el-table__header) th {
+  background-color: #f7fafc;
+  color: #4a5568;
+  font-weight: 700;
+  font-size: 13px;
+  height: 56px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.execution-table :deep(.el-table__row) {
+  height: 64px;
+}
+
+.time-cell {
+  display: flex;
+  align-items: center;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+.items-count {
+  color: #38a169;
+  font-size: 15px;
+}
+
+.duration-text {
+  color: #dd6b20;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 32px;
 }
 </style>

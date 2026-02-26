@@ -203,30 +203,25 @@ async def run_scraper(scraper_id: str, current_user: dict = Depends(get_current_
     return {"status": "success", "message": "Scraper task started in background"}
 
 @router.get("/{scraper_id}/data")
-async def get_scraper_data(
+async def get_scraper_executions(
     scraper_id: str, 
     page: int = 1, 
     page_size: int = 50,
     current_user: dict = Depends(get_current_user)
 ):
-    """获取站点采集到的列表数据"""
+    """获取站点采集的执行记录列表"""
     if not ObjectId.is_valid(scraper_id):
         raise HTTPException(status_code=400, detail="Invalid ID")
-    
-    # 获取站点配置，查看其存储目标集合
-    scraper_doc = mongo.db.scrapers.find_one({"_id": ObjectId(scraper_id)})
-    if not scraper_doc:
-        raise HTTPException(status_code=404, detail="Scraper not found")
         
-    # 确定目标集合
-    params = scraper_doc.get("params", {})
-    target_collection = params.get("mongo_collection") or scraper_doc.get("mongo_collection") or "scraper_results"
-    
     skip = (page - 1) * page_size
     query = {"scraper_id": ObjectId(scraper_id)}
     
-    total = mongo.db[target_collection].count_documents(query)
-    items = list(mongo.db[target_collection].find(query).sort("created_at", -1).skip(skip).limit(page_size))
+    total = mongo.db.scraper_executions.count_documents(query)
+    # 列表接口不返回 HTML、截图和完整抓取项，以节省流量
+    items = list(mongo.db.scraper_executions.find(
+        query, 
+        {"html": 0, "screenshot": 0, "items": 0}
+    ).sort("created_at", -1).skip(skip).limit(page_size))
     
     # 转换 ObjectId 为字符串
     for item in items:
@@ -237,8 +232,24 @@ async def get_scraper_data(
         "total": total,
         "items": items,
         "page": page,
-        "page_size": page_size,
-        "collection": target_collection
+        "page_size": page_size
     }
+
+@router.get("/executions/{execution_id}")
+async def get_execution_detail(
+    execution_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取单次执行的详细信息 (包含 HTML 和 截图)"""
+    if not ObjectId.is_valid(execution_id):
+        raise HTTPException(status_code=400, detail="Invalid ID")
+        
+    doc = mongo.db.scraper_executions.find_one({"_id": ObjectId(execution_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Execution not found")
+        
+    doc["_id"] = str(doc["_id"])
+    doc["scraper_id"] = str(doc["scraper_id"])
+    return doc
 
 # 移除了 execute_scraper_task，已移动到 app.services.scraper_service

@@ -163,39 +163,62 @@ async def execute_scraper_task(scraper_doc: dict):
             }
         )
         
+        # 提取抓取到的列表项和分页信息
+        items = result.get("items", [])
+        pages = result.get("pages", [])
+        
+        # 2.1 持久化站点采集执行记录 (按页存储：HTML、截图、性能数据等)
+        try:
+            # 如果有分页信息，按页存储；否则存储单条汇总记录
+            if pages:
+                execution_docs = []
+                for p in pages:
+                    execution_docs.append({
+                        "scraper_id": ObjectId(scraper_id),
+                        "scraper_name": scraper_name,
+                        "url": p.get("url", scraper_doc["url"]),
+                        "page_num": p.get("page_num", 1),
+                        "status": result.get("status", "success"),
+                        "error": result.get("error"),
+                        "html": p.get("html") if get_val("save_html", True) else None,
+                        "screenshot": p.get("screenshot"),
+                        "items_count": p.get("count", 0),
+                        "items": p.get("items", []), 
+                        "duration": result.get("duration", 0) / len(pages), # 估算单页耗时
+                        "engine": get_val("engine", "playwright"),
+                        "created_at": datetime.now()
+                    })
+                if execution_docs:
+                    mongo.db.scraper_executions.insert_many(execution_docs)
+                    logger.info(f"Stored {len(execution_docs)} scraper execution records for {scraper_name}")
+            else:
+                # 兜底：存储单条汇总记录
+                execution_doc = {
+                    "scraper_id": ObjectId(scraper_id),
+                    "scraper_name": scraper_name,
+                    "url": scraper_doc["url"],
+                    "status": result.get("status", "success"),
+                    "error": result.get("error"),
+                    "html": result.get("html") if get_val("save_html", True) else None,
+                    "screenshot": result.get("screenshot"),
+                    "items_count": len(items),
+                    "items": items, 
+                    "duration": result.get("duration", 0),
+                    "engine": get_val("engine", "playwright"),
+                    "created_at": datetime.now()
+                }
+                mongo.db.scraper_executions.insert_one(execution_doc)
+                logger.info(f"Stored single scraper execution record for {scraper_name}")
+        except Exception as e:
+            logger.error(f"Failed to store scraper execution record: {e}")
+        
         if result.get("status") == "failed":
             error_msg = result.get('error', 'Unknown error')
             logger.error(f"Scraper task failed: {error_msg}")
             await update_scraper_status(scraper_id, "failed", error_msg)
             return
             
-        items = result.get("items", [])
-        logger.info(f"Extracted {len(items)} items from {scraper_doc['url']}")
-        
-        # 2.1 存储列表项原始数据 (持久化)
-        if items:
-            try:
-                # 获取存储目标集合，默认使用 scraper_results
-                target_collection = get_val("mongo_collection") or "scraper_results"
-                
-                # 构造要插入的数据
-                storage_items = []
-                for item in items:
-                    storage_item = item.copy()
-                    storage_item["scraper_id"] = ObjectId(scraper_id)
-                    storage_item["scraper_name"] = scraper_name
-                    storage_item["source_url"] = scraper_doc["url"]
-                    storage_item["created_at"] = datetime.now()
-                    storage_items.append(storage_item)
-                
-                # 插入数据库 (支持自定义集合)
-                if storage_items:
-                    mongo.db[target_collection].insert_many(storage_items)
-                    logger.info(f"Stored {len(storage_items)} items to {target_collection} collection")
-            except Exception as e:
-                logger.error(f"Failed to store scraper items: {e}")
-        
-        # 3. 为每个提取到的链接创建采集任务
+        # 3. 为每个提取到的链接创建详情采集任务 (仅在成功且有项目时)
         count = 0
         for item in items:
             link = item.get("link")
