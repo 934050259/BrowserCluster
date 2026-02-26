@@ -25,7 +25,6 @@ from app.services.proxy_service import proxy_service
 
 logger = logging.getLogger(__name__)
 
-
 class Scraper:
     """网页抓取器"""
 
@@ -821,7 +820,7 @@ class Scraper:
             # 创建浏览器上下文参数
             context_options = {
                 "java_script_enabled": True,
-                "user_agent": user_agent
+                # "user_agent": user_agent
             }
             
             if proxy_config:
@@ -1402,7 +1401,6 @@ class Scraper:
                 # 检查请求 URL 是否匹配任何拦截模式
                 request_url = request.url
                 matched_pattern = None
-
                 for pattern in api_patterns:
                     if url_matches_pattern(request_url, pattern):
                         matched_pattern = pattern

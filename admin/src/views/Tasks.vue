@@ -221,6 +221,17 @@
                 />
               </el-tooltip>
 
+              <el-tooltip content="复制任务" placement="top">
+                <el-button 
+                  circle 
+                  size="small" 
+                  type="primary" 
+                  :icon="CopyDocument" 
+                  @click="copyTask(row)"
+                  class="copy-task-btn"
+                />
+              </el-tooltip>
+
               <el-tooltip content="删除任务" placement="top">
                 <el-button 
                   circle 
@@ -613,6 +624,25 @@
                   />
                 </div>
               </div>
+              
+              <div v-if="scrapeForm.params.parser === 'intercept_apis'" class="parser-config-area">
+                <div class="xpath-rules-header">
+                  <span>拦截api配置</span>
+                  <el-button type="primary" link :icon="Plus" @click="addXpathRule">添加规则</el-button>
+                </div>
+                <div v-for="(rule, index) in xpathRules" :key="index" class="xpath-rule-row">
+                  <el-input v-model="rule.path" placeholder="XPath 表达式，如: //h1/text()" style="flex: 1" />
+                  <el-button 
+                    type="danger" 
+                    circle
+                    plain
+                    :icon="Delete" 
+                    @click="removeXpathRule(index)" 
+                    :disabled="xpathRules.length <= 1"
+                    class="rule-delete-btn"
+                  />
+                </div>
+              </div>
             </div>
           </el-tab-pane>
 
@@ -662,6 +692,10 @@
                   </el-form-item>
                 </el-col>
               </el-row>
+
+              <el-form-item label="额外等待时间（ms）">
+                <el-input-number v-model="scrapeForm.params.wait_time" :min="0" :step="100" style="width: 100%" />
+              </el-form-item>
 
               <el-form-item label="视口尺寸 (分辨率)">
                 <div class="viewport-input">
@@ -1121,6 +1155,7 @@
                   <div class="req-detail">
                     <p><strong>完整 URL:</strong> {{ req.url }}</p>
                     <p><strong>状态码:</strong> <el-tag :type="req.status < 400 ? 'success' : 'danger'" size="small">{{ req.status }}</el-tag></p>
+                    <p><strong>Headers: </strong> {{ req.headers }}</p>
                     <div class="json-box">
                       <strong>响应内容:</strong>
                       <pre>{{ formatJSON(req.body) }}</pre>
@@ -1181,6 +1216,313 @@
           </el-tab-pane>
         </el-tabs>
       </div>
+    </el-dialog>
+
+    <!-- 编辑任务对话框 -->
+    <el-dialog 
+      v-model="showEditDialog" 
+      title="编辑抓取任务" 
+      width="800px" 
+      destroy-on-close 
+      top="8vh"
+      class="config-dialog"
+    >
+      <el-form :model="editForm" label-width="100px" label-position="top">
+        <el-tabs v-model="activeEditConfigTab" class="config-tabs">
+          <!-- 1. 基础配置 -->
+          <el-tab-pane name="basic">
+            <template #label>
+              <span class="tab-label">
+                <el-icon class="icon-basic"><Link /></el-icon>
+                <span>基础目标</span>
+              </span>
+            </template>
+            
+            <div class="tab-content">
+              <div class="section-header">
+                <div class="header-extra">
+                  <el-radio-group v-model="editSubmitMode" size="small">
+                    <el-radio-button label="single">单条任务</el-radio-button>
+                  </el-radio-group>
+                </div>
+              </div>
+
+              <div v-if="editSubmitMode === 'single'">
+                <el-form-item label="目标 URL" required>
+                  <el-input v-model="editForm.url" placeholder="请输入抓取地址，例如: https://example.com" clearable>
+                    <template #prefix><el-icon class="icon-link"><Connection /></el-icon></template>
+                  </el-input>
+                </el-form-item>
+                
+                <el-form-item label="Cookies">
+                    <div class="cookies-input-wrapper">
+                      <el-input
+                        v-model="editForm.params.cookies"
+                        type="textarea"
+                        :rows="3"
+                        placeholder="输入 Cookies 字符串或 JSON 格式，如：key1=value1; key2=value2"
+                      />
+                    </div>
+                </el-form-item>
+              </div>
+              
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="任务优先级">
+                    <el-select v-model="editForm.priority" style="width: 100%">
+                      <el-option label="最高优先级 (10)" :value="10" />
+                      <el-option label="普通优先级 (5)" :value="5" />
+                      <el-option label="最低优先级 (1)" :value="1" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="数据缓存">
+                    <div class="switch-container">
+                      <el-switch v-model="editForm.cache.enabled" />
+                      <span class="switch-tip">{{ editForm.cache.enabled ? '开启 (节省资源)' : '关闭 (实时抓取)' }}</span>
+                    </div>
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              
+              <el-form-item label="缓存有效期 (TTL/秒)" v-if="editForm.cache.enabled">
+                <el-input-number v-model="editForm.cache.ttl" :min="60" :step="60" style="width: 100%" />
+              </el-form-item>
+            </div>
+          </el-tab-pane>
+
+          <!-- 2. 解析配置 -->
+          <el-tab-pane name="parser">
+            <template #label>
+              <span class="tab-label">
+                <el-icon class="icon-parser"><MagicStick /></el-icon>
+                <span>内容解析</span>
+              </span>
+            </template>
+            
+            <div class="tab-content">
+              <el-form-item label="解析模式">
+                <el-radio-group v-model="editForm.params.parser" size="default">
+                  <el-radio-button label="">不解析</el-radio-button>
+                  <el-radio-button label="gne">智能正文 (GNE)</el-radio-button>
+                  <el-radio-button label="llm">大模型提取 (LLM)</el-radio-button>
+                  <el-radio-button label="xpath">自定义规则 (XPath)</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+
+              <div v-if="editForm.params.parser === 'gne'" class="parser-config-area">
+                <el-alert title="GNE 模式" type="info" :closable="false" show-icon description="适用于新闻、博客等文章类页面，自动提取标题、作者、发布时间、正文和图片。" />
+              </div>
+
+              <div v-if="editForm.params.parser === 'llm'" class="parser-config-area">
+                <div class="parser-presets">
+                  <span class="preset-label">常用模板:</span>
+                  <el-button-group>
+                    <el-button size="small" plain @click="applyEditLlmPreset('article')">文章提取</el-button>
+                    <el-button size="small" plain @click="applyEditLlmPreset('product')">商品详情</el-button>
+                    <el-button size="small" plain @click="applyEditLlmPreset('contact')">联系方式</el-button>
+                  </el-button-group>
+                </div>
+                <el-form-item class="mt-4">
+                  <template #label>
+                    <div class="label-with-help">
+                      <span>目标提取字段</span>
+                      <el-tooltip content="大模型将按照选定的键名生成 JSON 结果" placement="top">
+                        <el-icon class="help-icon"><QuestionFilled /></el-icon>
+                      </el-tooltip>
+                    </div>
+                  </template>
+                  <el-select
+                    v-model="editSelectedLlmFields"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    placeholder="选择或输入需要提取的字段"
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="item in llmFieldOptions"
+                      :key="item.value"
+                      :label="`${item.label} (${item.value})`"
+                      :value="item.value"
+                    />
+                  </el-select>
+                  <div class="input-tip">输入自定义字段名并按回车即可添加</div>
+                </el-form-item>
+                
+                <el-alert
+                  title="配置说明"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  class="mt-4 llm-helper-alert"
+                >
+                  <template #default>
+                    <div class="alert-content-mini">
+                      <p class="helper-text">请按 <strong>描述 (键名)</strong> 格式选择或输入字段。</p>
+                      <div class="format-example-mini">
+                        <span class="example-label">结果示例:</span>
+                        <code>{ "title": "..." }</code>
+                      </div>
+                      <p class="api-warning">
+                        <el-icon><Warning /></el-icon>
+                        注意：使用此功能前，请确保已在后端正确配置大模型 API 设置。
+                      </p>
+                    </div>
+                  </template>
+                </el-alert>
+              </div>
+
+              <div v-if="editForm.params.parser === 'xpath'" class="parser-config-area">
+                <div class="xpath-rules-header">
+                  <span>XPath 规则配置</span>
+                  <el-button type="primary" link :icon="Plus" @click="addEditXpathRule">添加规则</el-button>
+                </div>
+                <div v-for="(rule, index) in editXpathRules" :key="index" class="xpath-rule-row">
+                  <el-input v-model="rule.field" placeholder="字段名" style="width: 120px" />
+                  <el-input v-model="rule.path" placeholder="XPath 表达式，如: //h1/text()" style="flex: 1" />
+                  <el-button 
+                    type="danger" 
+                    circle
+                    plain
+                    :icon="Delete" 
+                    @click="removeEditXpathRule(index)" 
+                    :disabled="editXpathRules.length <= 1"
+                    class="rule-delete-btn"
+                  />
+                </div>
+              </div>
+              
+              <div v-if="editForm.params.parser === 'intercept_apis'" class="parser-config-area">
+                <div class="xpath-rules-header">
+                  <span>拦截api配置</span>
+                  <el-button type="primary" link :icon="Plus" @click="addEditXpathRule">添加规则</el-button>
+                </div>
+                <div v-for="(rule, index) in editXpathRules" :key="index" class="xpath-rule-row">
+                  <el-input v-model="rule.path" placeholder="XPath 表达式，如: //h1/text()" style="flex: 1" />
+                  <el-button 
+                    type="danger" 
+                    circle
+                    plain
+                    :icon="Delete" 
+                    @click="removeEditXpathRule(index)" 
+                    :disabled="editXpathRules.length <= 1"
+                    class="rule-delete-btn"
+                  />
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <!-- 3. 浏览器特征 -->
+          <el-tab-pane name="browser">
+            <template #label>
+              <span class="tab-label">
+                <el-icon class="icon-browser"><Monitor /></el-icon>
+                <span>浏览器特征</span>
+              </span>
+            </template>
+            
+            <div class="tab-content">
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="加载等待条件">
+                    <el-select v-model="editForm.params.wait_for" style="width: 100%">
+                      <el-option label="Network Idle (推荐)" value="networkidle" />
+                      <el-option label="Page Load (所有资源)" value="load" />
+                      <el-option label="DOM Ready (HTML解析)" value="domcontentloaded" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="渲染超时 (ms)">
+                    <el-input-number v-model="editForm.params.timeout" :min="5000" :step="5000" style="width: 100%" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+
+              <el-form-item label="视口尺寸 (分辨率)">
+                <div class="viewport-input">
+                  <el-input-number v-model="editForm.params.viewport.width" :min="320" placeholder="宽度" controls-position="right" />
+                  <span class="sep">×</span>
+                  <el-input-number v-model="editForm.params.viewport.height" :min="240" placeholder="高度" controls-position="right" />
+                </div>
+              </el-form-item>
+
+              <div class="feature-settings">
+                <div class="feature-item">
+                  <div class="feature-info">
+                    <span class="feature-name">反检测模式 (Stealth)</span>
+                    <span class="feature-desc">绕过大多数常见的机器人检测系统</span>
+                  </div>
+                  <el-switch v-model="editForm.params.stealth" />
+                </div>
+                <div class="feature-item">
+                  <div class="feature-info">
+                    <span class="feature-name">自动截图</span>
+                    <span class="feature-desc">保存网页快照用于调试或取证</span>
+                  </div>
+                  <el-switch v-model="editForm.params.screenshot" />
+                </div>
+                <div class="feature-item" v-if="editForm.params.screenshot">
+                  <div class="feature-info">
+                    <span class="feature-name">全屏快照</span>
+                    <span class="feature-desc">捕获整个页面高度而不仅是可视区域</span>
+                  </div>
+                  <el-switch v-model="editForm.params.is_fullscreen" />
+                </div>
+                <div class="feature-item">
+                  <div class="feature-info">
+                    <span class="feature-name">屏蔽图片/媒体</span>
+                    <span class="feature-desc">不加载图片和视频资源，加快抓取速度</span>
+                  </div>
+                  <el-switch v-model="editForm.params.block_images" />
+                </div>
+              </div>
+            </div>
+          </el-tab-pane>
+
+          <!-- 4. 网络与高级 -->
+          <el-tab-pane name="advanced">
+            <template #label>
+              <span class="tab-label">
+                <el-icon class="icon-advanced"><Setting /></el-icon>
+                <span>高级设置</span>
+              </span>
+            </template>
+            
+            <div class="tab-content">
+              <div class="section-title">代理配置</div>
+              <el-form-item label="代理服务器">
+                <el-input v-model="editForm.params.proxy.server" placeholder="http://proxy.example.com:8080" clearable />
+              </el-form-item>
+              <el-row :gutter="20" v-if="editForm.params.proxy.server">
+                <el-col :span="12">
+                  <el-form-item label="用户名">
+                    <el-input v-model="editForm.params.proxy.username" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="密码">
+                    <el-input v-model="editForm.params.proxy.password" show-password />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
+      </el-form>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showEditDialog = false">取 消</el-button>
+          <el-button type="primary" @click="submitEditTask" :loading="loading" class="submit-btn">
+            保存任务
+          </el-button>
+        </div>
+      </template>
     </el-dialog>
 
     <!-- API 配置对话框 -->
@@ -1308,8 +1650,10 @@ const isRetryEdit = ref(false)
 const retryTaskId = ref('')
 const showTaskDialog = ref(false)
 const showApiConfigDialog = ref(false)
+const showEditDialog = ref(false)
 const apiConfigJson = ref('')
 const activeConfigTab = ref('basic')
+const activeEditConfigTab = ref('basic')
 const matchedRules = ref([])
 const selectedRuleId = ref(null)
 const matchedCookies = ref(false)
@@ -1317,6 +1661,52 @@ let lastCheckedDomain = ''
 let debounceTimer = null
 const loadingHtml = ref(false)
 const loadingScreenshot = ref(false)
+
+// 编辑任务相关状态
+const editSubmitMode = ref('single')
+const editSelectedLlmFields = ref(['title', 'content'])
+const editXpathRules = ref([
+  { field: 'title', path: '//h1' },
+  { field: 'content', path: "//div[@class='article-body']" }
+])
+const currentEditTaskId = ref('')
+
+const editForm = ref({
+  url: '',
+  params: {
+    wait_for: 'networkidle',
+    wait_time: 3000,
+    timeout: 30000,
+    selector: '',
+    screenshot: true,
+    is_fullscreen: false,
+    block_images: false,
+    block_media: false,
+    user_agent: '',
+    viewport: {
+      width: 1920,
+      height: 1080
+    },
+    proxy: {
+        server: '',
+        username: '',
+        password: ''
+      },
+      cookies: '',
+      stealth: true,
+  parser: '',
+  parser_config: {
+    fields: ['title', 'content']
+  },
+  intercept_apis: [],
+    intercept_continue: false
+  },
+  cache: {
+    enabled: true,
+    ttl: 3600
+  },
+  priority: 1
+})
 
 const getParserTypeTag = (type) => {
   const map = {
@@ -1465,6 +1855,28 @@ const applyLlmPreset = (type) => {
     selectedLlmFields.value = [...presets[type]]
     ElMessage.success('已应用模板')
   }
+}
+
+// 编辑模式下的LLM预设应用
+const applyEditLlmPreset = (type) => {
+  const presets = {
+    article: ['title', 'content', 'author', 'publish_time'],
+    product: ['product_name', 'price', 'description', 'specifications'],
+    contact: ['company_name', 'phone', 'email', 'address']
+  }
+  if (presets[type]) {
+    editSelectedLlmFields.value = [...presets[type]]
+    ElMessage.success('已应用模板')
+  }
+}
+
+// 编辑模式下的XPath规则管理
+const addEditXpathRule = () => {
+  editXpathRules.value.push({ field: '', path: '' })
+}
+
+const removeEditXpathRule = (index) => {
+  editXpathRules.value.splice(index, 1)
 }
 
 const handleLlmFieldsChange = (val) => {
@@ -1820,6 +2232,112 @@ const viewTask = async (task) => {
   }
 }
 
+const copyTask = async (task) => {
+  try {
+    // 获取任务详情
+    const data = await getTask(task.task_id, { include_html: false, include_screenshot: false })
+    
+    // 填充新建任务表单数据
+    scrapeForm.value = {
+      url: data.url || '',
+      params: {
+        wait_for: data.params?.wait_for || 'networkidle',
+        wait_time: data.params?.wait_time || 3000,
+        timeout: data.params?.timeout || 30000,
+        selector: data.params?.selector || '',
+        screenshot: data.params?.screenshot !== false,
+        is_fullscreen: data.params?.is_fullscreen || false,
+        block_images: data.params?.block_images || false,
+        block_media: data.params?.block_media || false,
+        user_agent: data.params?.user_agent || '',
+        viewport: data.params?.viewport || { width: 1920, height: 1080 },
+        proxy: data.params?.proxy || { server: '', username: '', password: '' },
+        cookies: data.params?.cookies || '',
+        stealth: data.params?.stealth !== false,
+        parser: data.params?.parser || '',
+        parser_config: data.params?.parser_config || { fields: ['title', 'content'] },
+        intercept_apis: data.params?.intercept_apis || [],
+        intercept_continue: data.params?.intercept_continue || false
+      },
+      cache: data.cache || { enabled: true, ttl: 3600 },
+      priority: data.priority || 1
+    }
+    
+    // 处理解析配置
+    if (scrapeForm.value.params.parser === 'llm') {
+      selectedLlmFields.value = scrapeForm.value.params.parser_config?.fields || ['title', 'content']
+    } else if (scrapeForm.value.params.parser === 'xpath') {
+      const rules = scrapeForm.value.params.parser_config?.rules || {}
+      xpathRules.value = Object.entries(rules).map(([field, path]) => ({ field, path }))
+    } else {
+      selectedLlmFields.value = ['title', 'content']
+      xpathRules.value = [
+        { field: 'title', path: '//h1' },
+        { field: 'content', path: "//div[@class='article-body']" }
+      ]
+    }
+    
+    activeConfigTab.value = 'basic'
+    showScrapeDialog.value = true
+    ElMessage.success('任务配置已复制到新建任务表单')
+  } catch (error) {
+    ElMessage.error('获取任务详情失败')
+  }
+}
+
+const editTask = async (task) => {
+  try {
+    // 获取任务详情
+    const data = await getTask(task.task_id, { include_html: false, include_screenshot: false })
+    currentEditTaskId.value = task.task_id
+    
+    // 填充编辑表单数据
+    editForm.value = {
+      url: data.url || '',
+      params: {
+        wait_for: data.params?.wait_for || 'networkidle',
+        wait_time: data.params?.wait_time || 3000,
+        timeout: data.params?.timeout || 30000,
+        selector: data.params?.selector || '',
+        screenshot: data.params?.screenshot !== false,
+        is_fullscreen: data.params?.is_fullscreen || false,
+        block_images: data.params?.block_images || false,
+        block_media: data.params?.block_media || false,
+        user_agent: data.params?.user_agent || '',
+        viewport: data.params?.viewport || { width: 1920, height: 1080 },
+        proxy: data.params?.proxy || { server: '', username: '', password: '' },
+        cookies: data.params?.cookies || '',
+        stealth: data.params?.stealth !== false,
+        parser: data.params?.parser || '',
+        parser_config: data.params?.parser_config || { fields: ['title', 'content'] },
+        intercept_apis: data.params?.intercept_apis || [],
+        intercept_continue: data.params?.intercept_continue || false
+      },
+      cache: data.cache || { enabled: true, ttl: 3600 },
+      priority: data.priority || 1
+    }
+    
+    // 处理解析配置
+    if (editForm.value.params.parser === 'llm') {
+      editSelectedLlmFields.value = editForm.value.params.parser_config?.fields || ['title', 'content']
+    } else if (editForm.value.params.parser === 'xpath') {
+      const rules = editForm.value.params.parser_config?.rules || {}
+      editXpathRules.value = Object.entries(rules).map(([field, path]) => ({ field, path }))
+    } else {
+      editSelectedLlmFields.value = ['title', 'content']
+      editXpathRules.value = [
+        { field: 'title', path: '//h1' },
+        { field: 'content', path: "//div[@class='article-body']" }
+      ]
+    }
+    
+    activeEditConfigTab.value = 'basic'
+    showEditDialog.value = true
+  } catch (error) {
+    ElMessage.error('获取任务详情失败')
+  }
+}
+
 // 监听标签页切换，按需加载大数据字段
 watch(activeTab, async (newTab) => {
   if (!currentTask.value) return
@@ -1910,10 +2428,6 @@ const submitTask = async () => {
       } else {
         if (!data.params.proxy.username) delete data.params.proxy.username
         if (!data.params.proxy.password) delete data.params.proxy.password
-      }
-      
-      if (!data.params.intercept_apis || data.params.intercept_apis.length === 0) {
-        data.params.intercept_apis = null
       }
 
       if (data.params.cookies) {
@@ -2038,6 +2552,87 @@ const resetForm = () => {
   lastCheckedDomain = ''
   matchedRules.value = []
   activeConfigTab.value = 'basic'
+}
+
+const submitEditTask = async () => {
+  // 验证输入
+  if (!editForm.value.url) {
+    ElMessage.warning('请输入目标 URL')
+    return
+  }
+
+  loading.value = true
+  try {
+    // 深度克隆表单数据
+    const baseConfig = JSON.parse(JSON.stringify(editForm.value))
+    
+    // 统一处理参数格式
+    const processParams = (data) => {
+      if (!data.params.user_agent) data.params.user_agent = null
+      if (!data.params.selector) data.params.selector = null
+      
+      // 处理解析配置
+      if (data.params.parser === 'llm') {
+        data.params.parser_config = { fields: editSelectedLlmFields.value }
+      } else if (data.params.parser === 'xpath') {
+        const rules = {}
+        editXpathRules.value.forEach(r => {
+          if (r.field && r.path) rules[r.field] = r.path
+        })
+        data.params.parser_config = { rules }
+      } else if (data.params.parser === 'gne') {
+        data.params.parser_config = {}
+      } else {
+        data.params.parser_config = null
+      }
+
+      if (!data.params.proxy || !data.params.proxy.server) {
+        data.params.proxy = null
+      } else {
+        if (!data.params.proxy.username) delete data.params.proxy.username
+        if (!data.params.proxy.password) delete data.params.proxy.password
+      }
+      
+      if (!data.params.intercept_apis || data.params.intercept_apis.length === 0) {
+        data.params.intercept_apis = null
+      }
+
+      if (data.params.cookies) {
+        const cookieVal = data.params.cookies.trim()
+        if ((cookieVal.startsWith('[') && cookieVal.endsWith(']')) || 
+            (cookieVal.startsWith('{') && cookieVal.endsWith('}'))) {
+          try {
+            data.params.cookies = JSON.parse(cookieVal)
+          } catch (e) {
+            console.warn('Cookies parse failed, using as string')
+          }
+        }
+      } else {
+        data.params.cookies = null
+      }
+      
+      if (!data.params.viewport || !data.params.viewport.width || !data.params.viewport.height) {
+        data.params.viewport = null
+      }
+      return data
+    }
+
+    const submitData = processParams(baseConfig)
+    
+    // 调用 API 更新任务
+    // 这里假设后端有更新任务的 API 端点
+    // 如果没有专门的更新 API，可以先删除旧任务，再创建新任务
+    // 暂时使用 scrapeAsync 来创建新任务
+    await scrapeAsync(submitData)
+    
+    ElMessage.success('任务更新成功')
+    showEditDialog.value = false
+    loadTasks()
+  } catch (error) {
+    ElMessage.error('提交失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    loading.value = false
+  }
 }
 
 const getStatusType = (status) => {
@@ -2230,6 +2825,24 @@ onMounted(() => {
 
 .mr-2 {
   margin-right: 8px;
+}
+
+.copy-task-btn {
+  transition: all 0.3s ease;
+  background-color: #409EFF;
+  border-color: #409EFF;
+}
+
+.copy-task-btn:hover {
+  background-color: #66B1FF;
+  border-color: #66B1FF;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
+}
+
+.copy-task-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(64, 158, 255, 0.2);
 }
 
 /* 列表 UI 优化 */
