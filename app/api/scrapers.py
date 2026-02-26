@@ -206,4 +206,43 @@ async def run_scraper(scraper_id: str, current_user: dict = Depends(get_current_
     
     return {"status": "success", "message": "Scraper task started in background"}
 
+@router.get("/{scraper_id}/data")
+async def get_scraper_data(
+    scraper_id: str, 
+    page: int = 1, 
+    page_size: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """获取站点采集到的列表数据"""
+    if not ObjectId.is_valid(scraper_id):
+        raise HTTPException(status_code=400, detail="Invalid ID")
+    
+    # 获取站点配置，查看其存储目标集合
+    scraper_doc = mongo.db.scrapers.find_one({"_id": ObjectId(scraper_id)})
+    if not scraper_doc:
+        raise HTTPException(status_code=404, detail="Scraper not found")
+        
+    # 确定目标集合
+    params = scraper_doc.get("params", {})
+    target_collection = params.get("mongo_collection") or scraper_doc.get("mongo_collection") or "scraper_results"
+    
+    skip = (page - 1) * page_size
+    query = {"scraper_id": ObjectId(scraper_id)}
+    
+    total = mongo.db[target_collection].count_documents(query)
+    items = list(mongo.db[target_collection].find(query).sort("created_at", -1).skip(skip).limit(page_size))
+    
+    # 转换 ObjectId 为字符串
+    for item in items:
+        item["_id"] = str(item["_id"])
+        item["scraper_id"] = str(item["scraper_id"])
+        
+    return {
+        "total": total,
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "collection": target_collection
+    }
+
 # 移除了 execute_scraper_task，已移动到 app.services.scraper_service

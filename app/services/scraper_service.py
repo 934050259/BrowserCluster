@@ -172,6 +172,29 @@ async def execute_scraper_task(scraper_doc: dict):
         items = result.get("items", [])
         logger.info(f"Extracted {len(items)} items from {scraper_doc['url']}")
         
+        # 2.1 存储列表项原始数据 (持久化)
+        if items:
+            try:
+                # 获取存储目标集合，默认使用 scraper_results
+                target_collection = get_val("mongo_collection") or "scraper_results"
+                
+                # 构造要插入的数据
+                storage_items = []
+                for item in items:
+                    storage_item = item.copy()
+                    storage_item["scraper_id"] = ObjectId(scraper_id)
+                    storage_item["scraper_name"] = scraper_name
+                    storage_item["source_url"] = scraper_doc["url"]
+                    storage_item["created_at"] = datetime.now()
+                    storage_items.append(storage_item)
+                
+                # 插入数据库 (支持自定义集合)
+                if storage_items:
+                    mongo.db[target_collection].insert_many(storage_items)
+                    logger.info(f"Stored {len(storage_items)} items to {target_collection} collection")
+            except Exception as e:
+                logger.error(f"Failed to store scraper items: {e}")
+        
         # 3. 为每个提取到的链接创建采集任务
         count = 0
         for item in items:

@@ -88,7 +88,7 @@
             {{ formatTime(row.updated_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button-group>
               <el-button 
@@ -103,10 +103,18 @@
               <el-button 
                 type="info" 
                 size="small" 
-                @click="handleViewResults(row)"
+                @click="handleViewData(row)"
                 icon="Search"
               >
                 数据
+              </el-button>
+              <el-button 
+                type="warning" 
+                size="small" 
+                @click="handleViewResults(row)"
+                icon="List"
+              >
+                详情
               </el-button>
               <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
               <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
@@ -915,8 +923,46 @@
              ></iframe>
            </div>
         </div>
-      </div>
-    </el-dialog>
+        </div>
+      </el-dialog>
+
+      <!-- 抓取结果预览对话框 (移动到外层) -->
+      <el-dialog 
+        v-model="dataDialogVisible" 
+        :title="`采集数据 - ${currentScraper?.name}`" 
+        width="1000px"
+        destroy-on-close
+      >
+        <div v-loading="dataLoading">
+          <el-table :data="scraperData" stripe style="width: 100%" height="500">
+            <el-table-column type="index" width="50" label="#" />
+            <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="link" label="链接" min-width="300" show-overflow-tooltip>
+              <template #default="{ row }">
+                <el-link :href="row.link" target="_blank" type="primary">{{ row.link }}</el-link>
+              </template>
+            </el-table-column>
+            <el-table-column prop="time" label="发布时间" width="150" />
+            <el-table-column prop="created_at" label="采集时间" width="180">
+              <template #default="{ row }">
+                {{ formatTime(row.created_at) }}
+              </template>
+            </el-table-column>
+          </el-table>
+          
+          <div class="pagination-container mt-4">
+            <el-pagination
+              v-model:current-page="dataPage"
+              v-model:page-size="dataPageSize"
+              :page-sizes="[50, 100, 200]"
+              layout="total, sizes, prev, pager, next"
+              :total="dataTotal"
+              @size-change="handleDataSizeChange"
+              @current-change="handleDataPageChange"
+            />
+          </div>
+        </div>
+      </el-dialog>
   </div>
 </template>
 
@@ -925,7 +971,7 @@ import { ref, onMounted, reactive, computed, watch, onUnmounted, onActivated } f
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick, Loading, Warning } from '@element-plus/icons-vue'
-import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs } from '@/api'
+import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs, getScraperData } from '@/api'
 
 const scrapers = ref([])
 const rules = ref([])
@@ -989,6 +1035,50 @@ const searchQuery = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
 const selectedRows = ref([])
+
+// 采集数据相关状态
+const dataDialogVisible = ref(false)
+const dataLoading = ref(false)
+const scraperData = ref([])
+const dataTotal = ref(0)
+const dataPage = ref(1)
+const dataPageSize = ref(50)
+const currentScraper = ref(null)
+
+const handleViewData = async (row) => {
+    currentScraper.value = row
+    dataPage.value = 1
+    dataDialogVisible.value = true
+    fetchScraperData()
+}
+
+const fetchScraperData = async () => {
+    if (!currentScraper.value) return
+    dataLoading.value = true
+    try {
+        const res = await getScraperData(currentScraper.value._id, {
+            page: dataPage.value,
+            page_size: dataPageSize.value
+        })
+        scraperData.value = res.items
+        dataTotal.value = res.total
+    } catch (error) {
+        ElMessage.error('获取采集数据失败')
+    } finally {
+        dataLoading.value = false
+    }
+}
+
+const handleDataPageChange = (val) => {
+    dataPage.value = val
+    fetchScraperData()
+}
+
+const handleDataSizeChange = (val) => {
+    dataPageSize.value = val
+    dataPage.value = 1
+    fetchScraperData()
+}
 
 // 筛选逻辑
 const filteredScrapers = computed(() => {

@@ -351,3 +351,8 @@ export const runScraper = async (id) => {
   const response = await api.post(`/scrapers/${id}/run`)
   return response.data
 }
+
+export const getScraperData = async (id, params) => {
+  const response = await api.get(`/scrapers/${id}/data`, { params })
+  return response.data
+}
