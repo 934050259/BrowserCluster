@@ -738,6 +738,18 @@ const formRules = {
   parser_type: [{ required: true, message: '请选择解析模式', trigger: 'change' }]
 }
 
+// 自动从 URL 中解析域名
+watch(() => form.domain, (newVal) => {
+  if (newVal && (newVal.startsWith('http://') || newVal.startsWith('https://'))) {
+    try {
+      const url = new URL(newVal)
+      form.domain = url.hostname
+    } catch (e) {
+      // 忽略无效 URL
+    }
+  }
+})
+
 const fetchRules = async () => {
   loading.value = true
   try {
