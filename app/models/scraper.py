@@ -65,6 +65,11 @@ class ScraperBase(BaseModel):
     last_run_at: Optional[datetime] = Field(None, description="最后一次定时执行时间")
     next_run_at: Optional[datetime] = Field(None, description="下一次预计执行时间")
     enabled: bool = Field(True, description="站点是否启用")
+    
+    # 测试状态回显
+    last_test_status: Optional[str] = Field(None, description="最后一次测试执行状态: running, success, failed")
+    last_test_error: Optional[str] = Field(None, description="最后一次测试执行错误信息")
+    last_test_at: Optional[datetime] = Field(None, description="最后一次测试执行时间")
 
 class ScraperCreate(ScraperBase):
     pass

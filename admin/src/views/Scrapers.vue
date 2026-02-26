@@ -44,8 +44,9 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" />
-        <el-table-column prop="name" label="任务名称" min-width="150" />
-        <el-table-column label="状态" width="100">
+        <el-table-column prop="name" label="任务名称" min-width="200" />
+        <el-table-column prop="description" label="描述" min-width="100" show-overflow-tooltip />
+        <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-switch
               v-model="row.enabled"
@@ -53,7 +54,7 @@
             />
           </template>
         </el-table-column>
-        <el-table-column prop="url" label="起始 URL" min-width="250" show-overflow-tooltip>
+        <el-table-column prop="url" label="起始 URL" min-width="280" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link :href="row.url" target="_blank" type="primary" :underline="false">
               {{ row.url }}
@@ -66,7 +67,23 @@
              <span v-else class="text-gray">-</span>
            </template>
         </el-table-column>
-        <el-table-column prop="updated_at" label="最后修改" width="180">
+        <el-table-column label="测试状态" width="120">
+          <template #default="{ row }">
+            <div v-if="row.last_test_status === 'running'" class="status-running">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              <span>正在测试</span>
+            </div>
+            <el-tooltip v-else-if="row.last_test_status === 'failed'" :content="row.last_test_error" placement="top">
+              <el-tag type="danger" size="small" class="cursor-pointer">
+                测试失败
+                <el-icon><Warning /></el-icon>
+              </el-tag>
+            </el-tooltip>
+            <el-tag v-else-if="row.last_test_status === 'success'" type="success" size="small">测试通过</el-tag>
+            <span v-else class="text-gray-400">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="updated_at" label="最后修改" width="150">
           <template #default="{ row }">
             {{ formatTime(row.updated_at) }}
           </template>
@@ -907,7 +924,7 @@
 import { ref, onMounted, reactive, computed, watch, onUnmounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick } from '@element-plus/icons-vue'
+import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick, Loading, Warning } from '@element-plus/icons-vue'
 import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs } from '@/api'
 
 const scrapers = ref([])
@@ -915,9 +932,31 @@ const rules = ref([])
 const router = useRouter()
 const loading = ref(false)
 const runningScrapers = ref(new Set(JSON.parse(localStorage.getItem('runningScrapers') || '[]')))
+let pollingTimer = null
 
-const saveRunningStatus = () => {
-    localStorage.setItem('runningScrapers', JSON.stringify(Array.from(runningScrapers.value)))
+const startPolling = () => {
+    if (pollingTimer) return
+    pollingTimer = setInterval(async () => {
+        // 只有当有正在运行的任务时才轮询
+        const hasRunning = scrapers.value.some(s => s.last_test_status === 'running')
+        if (hasRunning) {
+            try {
+                const scrapersData = await getScrapers()
+                scrapers.value = scrapersData
+            } catch (error) {
+                console.error('Polling error:', error)
+            }
+        } else {
+            stopPolling()
+        }
+    }, 2000)
+}
+
+const stopPolling = () => {
+    if (pollingTimer) {
+        clearInterval(pollingTimer)
+        pollingTimer = null
+    }
 }
 
 const activeTab = ref('basic')
@@ -1027,7 +1066,7 @@ const handleBatchDelete = () => {
 
 // 处理执行
 const handleRun = async (row) => {
-    if (runningScrapers.value.has(row._id)) return
+    if (row.last_test_status === 'running') return
     
     ElMessageBox.confirm(
         `确定要立即对站点 "${row.name}" 执行采集测试吗？`,
@@ -1039,33 +1078,34 @@ const handleRun = async (row) => {
         }
     ).then(async () => {
         try {
-            runningScrapers.value.add(row._id)
-            saveRunningStatus()
-            
+            row.last_test_status = 'running' // 立即反馈
             await runScraper(row._id)
             ElMessage.success(`测试任务 "${row.name}" 已提交`)
-            
-            // 提交成功后保持 5 秒的“正在测试”状态，给用户明确反馈
-            setTimeout(() => {
-                runningScrapers.value.delete(row._id)
-                saveRunningStatus()
-            }, 5000)
+            startPolling() // 启动轮询
         } catch (error) {
-            runningScrapers.value.delete(row._id)
-            saveRunningStatus()
-            
+            row.last_test_status = 'failed'
             const errorMsg = error.response?.data?.detail || error.message || '测试任务提交失败'
-            
-            ElMessageBox.alert(errorMsg, '测试失败', {
-                confirmButtonText: '确定',
-                type: 'error',
-                customClass: 'error-message-box'
-            })
+            ElMessage.error(errorMsg)
         }
-    }).catch(() => {
-        // 取消执行，不做任何操作
-    })
+    }).catch(() => {})
 }
+
+onMounted(() => {
+    fetchData()
+    loadProxyGroups()
+    loadConfigs()
+})
+
+onUnmounted(() => {
+    stopPolling()
+})
+
+watch(scrapers, (newScrapers) => {
+    const hasRunning = newScrapers.some(s => s.last_test_status === 'running')
+    if (hasRunning) {
+        startPolling()
+    }
+}, { deep: true })
 
 // 提取域名逻辑
 const currentDomain = computed(() => {
@@ -2501,5 +2541,18 @@ onUnmounted(() => {
 }
 .flex-1 {
     flex: 1;
+}
+
+.status-running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #409eff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status-running .is-loading {
+  font-size: 16px;
 }
 </style>

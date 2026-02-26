@@ -1,5 +1,6 @@
 import logging
 from urllib.parse import urlparse
+from datetime import datetime
 from bson import ObjectId
 from app.db.mongo import mongo
 from app.core.scraper import Scraper
@@ -7,6 +8,25 @@ from app.services.task_service import task_service
 from app.models.task import ScrapeRequest, ScrapeParams
 
 logger = logging.getLogger(__name__)
+
+async def update_scraper_status(scraper_id: str, status: str, error: str = None):
+    """更新采集任务测试状态"""
+    try:
+        update_doc = {
+            "last_test_status": status,
+            "last_test_at": datetime.now()
+        }
+        if error is not None:
+            update_doc["last_test_error"] = error
+        else:
+            update_doc["last_test_error"] = ""
+            
+        mongo.db.scrapers.update_one(
+            {"_id": ObjectId(scraper_id)},
+            {"$set": update_doc}
+        )
+    except Exception as e:
+        logger.error(f"Failed to update scraper status: {e}")
 
 def _match_rule_by_url(url: str):
     """根据 URL 匹配解析规则"""
@@ -40,16 +60,19 @@ def _match_rule_by_url(url: str):
 
 async def execute_scraper_task(scraper_doc: dict):
     """后台执行站点采集任务"""
+    scraper_id = str(scraper_doc["_id"])
+    scraper_name = scraper_doc["name"]
+    
     try:
-        scraper_id = str(scraper_doc["_id"])
-        scraper_name = scraper_doc["name"]
-        
         # 检查站点是否启用
         if not scraper_doc.get("enabled", True):
             logger.info(f"Scraper task skipped (disabled): {scraper_name} ({scraper_id})")
             return
             
         logger.info(f"Starting scraper task: {scraper_name} ({scraper_id})")
+        
+        # 更新状态为运行中
+        await update_scraper_status(scraper_id, "running")
         
         scraper = Scraper()
         
@@ -141,7 +164,9 @@ async def execute_scraper_task(scraper_doc: dict):
         )
         
         if result.get("status") == "failed":
-            logger.error(f"Scraper task failed: {result.get('error')}")
+            error_msg = result.get('error', 'Unknown error')
+            logger.error(f"Scraper task failed: {error_msg}")
+            await update_scraper_status(scraper_id, "failed", error_msg)
             return
             
         items = result.get("items", [])
@@ -203,8 +228,11 @@ async def execute_scraper_task(scraper_doc: dict):
             # 创建任务
             await task_service.create_task(request)
             count += 1
-            
+        
         logger.info(f"Created {count} detail scraping tasks for scraper: {scraper_name}")
+        # 更新状态为成功
+        await update_scraper_status(scraper_id, "success")
         
     except Exception as e:
         logger.error(f"Error executing scraper task: {e}", exc_info=True)
+        await update_scraper_status(scraper_id, "failed", str(e))
