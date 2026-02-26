@@ -25,8 +25,12 @@ class ScraperScheduler:
     async def load_all_jobs(self):
         """从数据库加载所有启用的定时任务"""
         try:
-            enabled_scrapers = list(mongo.db.scrapers.find({"enabled_schedule": True}))
-            logger.info(f"Loading {len(enabled_scrapers)} enabled scraper schedules")
+            # 必须同时满足: 1. 站点已启用 (enabled); 2. 调度计划已开启 (enabled_schedule)
+            enabled_scrapers = list(mongo.db.scrapers.find({
+                "enabled": True,
+                "enabled_schedule": True
+            }))
+            logger.info(f"Loading {len(enabled_scrapers)} active scraper schedules")
             for scraper in enabled_scrapers:
                 self.add_or_update_job(scraper)
         except Exception as e:
@@ -36,27 +40,36 @@ class ScraperScheduler:
         """添加或更新定时任务"""
         scraper_id = str(scraper_doc["_id"])
         cron = scraper_doc.get("cron")
-        enabled = scraper_doc.get("enabled_schedule", False)
+        
+        # 必须同时满足站点启用和调度开启
+        is_active = scraper_doc.get("enabled", True) and scraper_doc.get("enabled_schedule", False)
 
         # 如果任务已存在，先移除
         if scraper_id in self.running_jobs:
             try:
                 self.scheduler.remove_job(self.running_jobs[scraper_id])
                 del self.running_jobs[scraper_id]
+                
+                # 也要清除数据库里的 next_run_at
+                mongo.db.scrapers.update_one(
+                    {"_id": scraper_doc["_id"]},
+                    {"$set": {"next_run_at": None}}
+                )
             except:
                 pass
 
-        if enabled and cron:
+        if is_active and cron:
             try:
                 job = self.scheduler.add_job(
                     self._run_task,
                     CronTrigger.from_crontab(cron),
                     args=[scraper_id],
                     id=f"scraper_{scraper_id}",
-                    replace_existing=True
+                    replace_existing=True,
+                    misfire_grace_time=60 # 超过 1 分钟则不再补偿执行
                 )
                 self.running_jobs[scraper_id] = job.id
-                logger.info(f"Scheduled scraper {scraper_id} with cron: {cron}")
+                logger.info(f"Scheduled active scraper {scraper_id} with cron: {cron}")
                 
                 # 更新下一次运行时间
                 next_run = job.next_run_time
@@ -88,7 +101,11 @@ class ScraperScheduler:
         """执行定时任务"""
         try:
             scraper_doc = mongo.db.scrapers.find_one({"_id": ObjectId(scraper_id)})
-            if not scraper_doc or not scraper_doc.get("enabled_schedule"):
+            
+            # 必须同时满足站点启用和调度开启
+            is_active = scraper_doc and scraper_doc.get("enabled", True) and scraper_doc.get("enabled_schedule", False)
+            
+            if not is_active:
                 self.remove_job(scraper_id)
                 return
 

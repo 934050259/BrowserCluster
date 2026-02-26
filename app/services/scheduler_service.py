@@ -74,7 +74,11 @@ class SchedulerService:
         """从数据库加载所有激活的定时任务并添加到调度器"""
         try:
             # 获取所有未删除且状态为激活的任务
-            cursor = mongo.schedules.find({"status": ScheduleStatus.ACTIVE, "is_deleted": {"$ne": True}})
+            # 显式使用 .value 确保查询字符串匹配
+            cursor = mongo.schedules.find({
+                "status": ScheduleStatus.ACTIVE.value, 
+                "is_deleted": {"$ne": True}
+            })
             schedules = list(cursor)
             for doc in schedules:
                 self.add_job(ScheduleModel(**doc))
@@ -113,11 +117,23 @@ class SchedulerService:
             await task_service.create_task(request)
             
             # 更新最近运行时间
+            update_data = {"last_run": datetime.now()}
+            
+            # 如果是单次执行任务，执行后将其状态设为已完成
+            if doc.get("schedule_type") == ScheduleType.ONCE:
+                update_data["status"] = ScheduleStatus.PAUSED # 或者定义一个 COMPLETED 状态
+                logger.info(f"One-time job {schedule_id} completed, setting status to PAUSED")
+                
             await asyncio.to_thread(
                 mongo.schedules.update_one,
                 {"schedule_id": schedule_id},
-                {"$set": {"last_run": datetime.now()}}
+                {"$set": update_data}
             )
+            
+            # 如果是单次执行任务，从调度器中移除自己
+            if doc.get("schedule_type") == ScheduleType.ONCE:
+                self.remove_job(schedule_id)
+                
             logger.info(f"Scheduled job {schedule.name} ({schedule_id}) executed successfully")
             
         except Exception as e:
@@ -137,6 +153,15 @@ class SchedulerService:
                 trigger = CronTrigger.from_crontab(schedule.cron)
             elif schedule.schedule_type == ScheduleType.ONCE:
                 if schedule.once_time:
+                    # 如果是一次性任务，且时间已过，不应添加到调度器
+                    if schedule.once_time < datetime.now():
+                        logger.warning(f"One-time job {schedule.schedule_id} scheduled time {schedule.once_time} is in the past, skipping")
+                        # 自动更新数据库状态
+                        mongo.schedules.update_one(
+                            {"schedule_id": schedule.schedule_id},
+                            {"$set": {"status": ScheduleStatus.PAUSED}}
+                        )
+                        return
                     trigger = DateTrigger(run_date=schedule.once_time)
                 else:
                     logger.warning(f"Schedule {schedule.schedule_id} is 'once' but once_time is missing")
@@ -148,7 +173,8 @@ class SchedulerService:
                     args=[schedule.schedule_id],
                     id=schedule.schedule_id,
                     name=schedule.name,
-                    replace_existing=True
+                    replace_existing=True,
+                    misfire_grace_time=60 # 超过 1 分钟则不再补偿执行
                 )
                 logger.info(f"Added job to scheduler: {schedule.name} ({schedule_id=})")
         except Exception as e:

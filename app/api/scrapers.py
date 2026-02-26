@@ -35,9 +35,8 @@ async def create_scraper(scraper: ScraperCreate, current_user: dict = Depends(ge
     result = mongo.db.scrapers.insert_one(doc)
     doc["_id"] = result.inserted_id
     
-    # 如果启用了定时任务，添加到调度器
-    if doc.get("enabled_schedule") and doc.get("cron"):
-        scraper_scheduler.add_or_update_job(doc)
+    # 更新调度器状态
+    scraper_scheduler.add_or_update_job(doc)
         
     return doc
 
@@ -76,11 +75,8 @@ async def update_scraper(scraper_id: str, scraper: ScraperUpdate, current_user: 
     if not result:
         raise HTTPException(status_code=404, detail="Scraper not found")
     
-    # 更新调度器状态
-    if result.get("enabled_schedule") and result.get("cron"):
-        scraper_scheduler.add_or_update_job(result)
-    else:
-        scraper_scheduler.remove_job(scraper_id)
+    # 更新调度器状态：根据站点是否启用和调度配置自动添加/移除任务
+    scraper_scheduler.add_or_update_job(result)
         
     return result
 
