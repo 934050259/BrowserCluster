@@ -1,5 +1,8 @@
 # Browser Cluster
 
+<p align="center">
+  <strong>中文</strong> | <a href="README_EN.md">English</a>
+</p>
 
 > [!IMPORTANT]
 > **前期项目会有较多 bug，请大家踊跃提 issues，作者看到后第一时间更新！**
