@@ -61,7 +61,15 @@
             </el-link>
           </template>
         </el-table-column>
-        <el-table-column label="关联规则" min-width="150">
+        <el-table-column label="详情规则" min-width="150">
+           <template #header>
+             <div class="header-with-tip">
+               <span>详情规则</span>
+               <el-tooltip content="指定抓取列表项链接后，详情页面的解析与提取规则" placement="top">
+                 <el-icon class="header-tip-icon"><QuestionFilled /></el-icon>
+               </el-tooltip>
+             </div>
+           </template>
            <template #default="{ row }">
              <el-tag v-if="row.rule_id" type="success" style="font-size: 13px;">{{ getRuleName(row.rule_id) }}</el-tag>
              <span v-else class="text-gray">-</span>
@@ -172,7 +180,7 @@
                   </el-input>
                 </el-form-item>
 
-                <el-form-item label="关联规则">
+                <el-form-item label="详情规则">
                   <div class="rule-select-container">
                     <el-select v-model="form.rule_id" placeholder="选择详情页解析规则" clearable style="flex: 1">
                       <el-option 
@@ -195,7 +203,7 @@
                   </div>
                   <div class="input-tip" style="color: rgb(238, 118, 82);">
                     <span v-if="currentDomain">已按域名 <code>{{ currentDomain }}</code> 自动筛选。</span>
-                    <span>选择用于解析详情页的网站配置规则。</span>
+                    <span>指定抓取列表项链接后，详情页面的解析与提取规则。</span>
                   </div>
                 </el-form-item>
 
