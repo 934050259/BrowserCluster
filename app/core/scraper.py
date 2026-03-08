@@ -204,12 +204,13 @@ class Scraper:
                             return res.strip() if isinstance(r, str) else res.text_content().strip()
                         except: return default
 
-                    item['title'] = extract_one(title_xpath)
-                    link = extract_one(link_xpath)
-                    item['link'] = urljoin(tab.url, link) if link else ""
+                    if title_xpath: item['title'] = extract_one(title_xpath)
+                    if link_xpath:
+                        link = extract_one(link_xpath)
+                        item['link'] = urljoin(tab.url, link) if link else ""
                     if time_xpath: item['time'] = extract_one(time_xpath)
                     
-                    if item.get('title') or item.get('link'):
+                    if item.get('title') or item.get('link') or item.get('time'):
                         page_items.append(item)
                 
                 all_items.extend(page_items)
@@ -379,12 +380,13 @@ class Scraper:
                             return res.strip() if isinstance(res, str) else res.text_content().strip()
                         except: return default
 
-                    item['title'] = extract_one(title_xpath)
-                    link = extract_one(link_xpath)
-                    item['link'] = urljoin(page.url, link) if link else ""
+                    if title_xpath: item['title'] = extract_one(title_xpath)
+                    if link_xpath:
+                        link = extract_one(link_xpath)
+                        item['link'] = urljoin(page.url, link) if link else ""
                     if time_xpath: item['time'] = extract_one(time_xpath)
                     
-                    if item.get('title') or item.get('link'):
+                    if item.get('title') or item.get('link') or item.get('time'):
                         page_items.append(item)
                 
                 all_items.extend(page_items)
@@ -602,17 +604,18 @@ class Scraper:
                         except Exception:
                             return default
 
-                    item['title'] = extract_one(title_xpath)
-                    link = extract_one(link_xpath)
-                    if link:
-                        item['link'] = urljoin(current_url, link)
-                    else:
-                        item['link'] = ""
+                    if title_xpath: item['title'] = extract_one(title_xpath)
+                    if link_xpath:
+                        link = extract_one(link_xpath)
+                        if link:
+                            item['link'] = urljoin(current_url, link)
+                        else:
+                            item['link'] = ""
                         
                     if time_xpath:
                         item['time'] = extract_one(time_xpath)
                     
-                    if item.get('title') or item.get('link'):
+                    if item.get('title') or item.get('link') or item.get('time'):
                         page_items.append(item)
                 
                 all_items.extend(page_items)

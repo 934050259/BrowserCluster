@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 from datetime import datetime
 from bson import ObjectId
 from app.models.common import PyObjectId
@@ -7,7 +7,7 @@ from app.models.task import StorageType
 
 class ScraperBase(BaseModel):
     name: str = Field(..., description="任务名称")
-    url: HttpUrl = Field(..., description="起始 URL")
+    url: str = Field(..., description="起始 URL")
     rule_id: Optional[str] = Field(None, description="关联的详情页解析规则 ID")
     description: Optional[str] = Field(None, description="描述")
     
@@ -76,7 +76,7 @@ class ScraperCreate(ScraperBase):
 
 class ScraperUpdate(ScraperBase):
     name: Optional[str] = None
-    url: Optional[HttpUrl] = None
+    url: Optional[str] = None
     list_xpath: Optional[str] = None
     title_xpath: Optional[str] = None
     link_xpath: Optional[str] = None
@@ -91,7 +91,7 @@ class ScraperResponse(ScraperBase):
         json_encoders = {ObjectId: str}
 
 class ScraperTestRequest(BaseModel):
-    url: HttpUrl
+    url: str
     list_xpath: str
     title_xpath: str
     link_xpath: str
@@ -112,7 +112,7 @@ class ScraperTestRequest(BaseModel):
     cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None
 
 class AiRuleGenerationRequest(BaseModel):
-    url: HttpUrl
+    url: str
     wait_for_selector: Optional[str] = None
     wait_time: int = 3000  # 默认额外等待 3 秒
     timeout: int = 30000

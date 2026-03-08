@@ -337,6 +337,11 @@ export const deleteScraper = async (id) => {
   return response.data
 }
 
+export const clearScraperExecutions = async (id) => {
+  const response = await api.delete(`/scrapers/${id}/data`)
+  return response.data
+}
+
 export const testScraper = async (data) => {
   const response = await api.post('/scrapers/test', data, { timeout: 120000 })
   return response.data

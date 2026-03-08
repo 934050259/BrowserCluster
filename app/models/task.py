@@ -6,7 +6,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, Any, List, Union
-from pydantic import BaseModel, HttpUrl, Field
+from pydantic import BaseModel, Field
 
 
 class StorageType(str, Enum):
@@ -53,7 +53,7 @@ class CacheConfig(BaseModel):
 
 class ScrapeRequest(BaseModel):
     """抓取请求模型"""
-    url: HttpUrl  # 目标 URL
+    url: str  # 目标 URL
     params: ScrapeParams = Field(default_factory=ScrapeParams)  # 抓取参数
     cache: CacheConfig = Field(default_factory=CacheConfig)  # 缓存配置
     priority: int = 1  # 任务优先级（数字越大优先级越高）

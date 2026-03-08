@@ -202,6 +202,22 @@ async def run_scraper(scraper_id: str, current_user: dict = Depends(get_current_
     
     return {"status": "success", "message": "Scraper task started in background"}
 
+@router.delete("/{scraper_id}/data")
+async def clear_scraper_executions(scraper_id: str, current_user: dict = Depends(get_current_user)):
+    """清空站点的所有抓取历史记录"""
+    if not ObjectId.is_valid(scraper_id):
+        raise HTTPException(status_code=400, detail="Invalid ID")
+        
+    result = mongo.db.scraper_executions.delete_many({"scraper_id": ObjectId(scraper_id)})
+    
+    # 同时可以考虑更新 scraper 状态
+    mongo.db.scrapers.update_one(
+        {"_id": ObjectId(scraper_id)},
+        {"$set": {"last_test_status": None, "last_test_error": None}}
+    )
+    
+    return {"status": "success", "deleted_count": result.deleted_count}
+
 @router.get("/{scraper_id}/data")
 async def get_scraper_executions(
     scraper_id: str, 

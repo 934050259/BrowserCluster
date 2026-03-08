@@ -4,7 +4,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 from app.models.task import ScrapeParams, CacheConfig
 
 
@@ -26,7 +26,7 @@ class ScheduleModel(BaseModel):
     schedule_id: Optional[str] = None  # 调度 ID
     name: str  # 任务名称
     description: Optional[str] = None  # 任务描述
-    url: HttpUrl  # 目标 URL
+    url: str  # 目标 URL
     params: ScrapeParams = Field(default_factory=ScrapeParams)  # 抓取参数
     cache: CacheConfig = Field(default_factory=CacheConfig)  # 缓存配置
     priority: int = 1  # 任务优先级
@@ -50,7 +50,7 @@ class ScheduleCreate(BaseModel):
     """创建定时任务请求模型"""
     name: str
     description: Optional[str] = None
-    url: HttpUrl
+    url: str
     params: ScrapeParams = Field(default_factory=ScrapeParams)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     priority: int = 1
@@ -66,7 +66,7 @@ class ScheduleUpdate(BaseModel):
     """更新定时任务请求模型"""
     name: Optional[str] = None
     description: Optional[str] = None
-    url: Optional[HttpUrl] = None
+    url: Optional[str] = None
     params: Optional[ScrapeParams] = None
     cache: Optional[CacheConfig] = None
     priority: Optional[int] = None

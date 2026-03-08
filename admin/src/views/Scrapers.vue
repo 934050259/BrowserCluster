@@ -189,19 +189,27 @@
                         :value="rule.id" 
                       />
                     </el-select>
-                    <el-button 
-                      v-if="filteredRules.length === 0 && form.url" 
-                      type="primary" 
-                      link 
-                      @click="goToRuleConfig"
-                      class="ml-2"
-                      :loading="isNavigating"
-                    >
-                      <el-icon v-if="!isNavigating"><Setting /></el-icon>去配置规则
-                    </el-button>
+                    <div class="rule-actions ml-2">
+                      <el-checkbox v-model="showAllRules" label="显示全部" size="small" />
+                      <el-button 
+                        v-if="filteredRules.length === 0 && form.url" 
+                        type="primary" 
+                        link 
+                        @click="goToRuleConfig"
+                        class="ml-2"
+                        :loading="isNavigating"
+                      >
+                        <el-icon v-if="!isNavigating"><Setting /></el-icon>去配置规则
+                      </el-button>
+                    </div>
                   </div>
                   <div class="input-tip" style="color: rgb(238, 118, 82);">
-                    <span v-if="currentDomain">已按域名 <code>{{ currentDomain }}</code> 自动筛选。</span>
+                    <template v-if="!showAllRules && currentDomain">
+                      <span>已按域名 <code>{{ currentDomain }}</code> 自动筛选。</span>
+                    </template>
+                    <template v-else-if="showAllRules">
+                      <span>正在显示所有已配置的详情规则。</span>
+                    </template>
                     <span>指定抓取列表项链接后，详情页面的解析与提取规则。</span>
                   </div>
                 </el-form-item>
@@ -1084,7 +1092,7 @@ import { ref, onMounted, reactive, computed, watch, onUnmounted, onActivated } f
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick, Loading, Warning } from '@element-plus/icons-vue'
-import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs, getScraperData, getScraperExecution } from '@/api'
+import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs, getScraperData, getScraperExecution, clearScraperExecutions } from '@/api'
 
 const scrapers = ref([])
 const rules = ref([])
@@ -1148,6 +1156,7 @@ const searchQuery = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
 const selectedRows = ref([])
+const showAllRules = ref(false)
 
 // 采集数据相关状态
 const dataDialogVisible = ref(false)
@@ -1370,9 +1379,9 @@ const currentDomain = computed(() => {
 
 // 根据域名筛选规则
 const filteredRules = computed(() => {
-    if (!currentDomain.value) return rules.value
+    if (showAllRules.value || !currentDomain.value) return rules.value
     const domain = currentDomain.value.toLowerCase()
-    return rules.value.filter(rule => {
+    const matches = rules.value.filter(rule => {
         const ruleDomain = rule.domain.toLowerCase()
         // 1. 完全匹配
         if (ruleDomain === domain) return true
@@ -1386,6 +1395,9 @@ const filteredRules = computed(() => {
         // 4. 包含匹配 (兜底)
         return domain.includes(ruleDomain) || ruleDomain.includes(domain)
     })
+    
+    // 如果没有匹配到规则，则返回全部，或者用户开启了显示全部
+    return matches.length > 0 ? matches : rules.value
 })
 
 const goToRuleConfig = () => {
@@ -1821,9 +1833,7 @@ const form = reactive({
 const formRules = {
     name: [{ required: true, message: '请输入任务名称', trigger: 'blur' }],
     url: [{ required: true, message: '请输入起始 URL', trigger: 'blur' }],
-    list_xpath: [{ required: true, message: '请输入列表容器 XPath', trigger: 'blur' }],
-    title_xpath: [{ required: true, message: '请输入标题 XPath', trigger: 'blur' }],
-    link_xpath: [{ required: true, message: '请输入链接 XPath', trigger: 'blur' }]
+    list_xpath: [{ required: true, message: '请输入列表容器 XPath', trigger: 'blur' }]
 }
 
 const fetchData = async () => {
@@ -1854,6 +1864,7 @@ const formatTime = (time) => {
 
 const handleAdd = async () => {
     isEdit.value = false
+    showAllRules.value = false
     activeTab.value = 'basic'
     
     // 如果规则列表为空，则获取
@@ -1920,6 +1931,7 @@ const handleViewResults = (row) => {
 
 const handleEdit = async (row) => {
     isEdit.value = true
+    showAllRules.value = false
     activeTab.value = 'basic'
     
     // 基础赋值
@@ -2144,17 +2156,15 @@ const handleTest = async (fromAi = false) => {
     if (!isActuallyAi && !testResultVisible.value) {
         const url = String(form.url || '').trim();
         const list_xpath = String(form.list_xpath || '').trim();
-        const title_xpath = String(form.title_xpath || '').trim();
-        const link_xpath = String(form.link_xpath || '').trim();
 
-        if (!url || !list_xpath || !title_xpath || !link_xpath) {
-            ElMessage.warning('请先填写完整的 URL 和基础 XPath 规则')
+        if (!url || !list_xpath) {
+            ElMessage.warning('请先填写完整的 URL 和列表容器 XPath')
             return
         }
         
         testForm.list_xpath = list_xpath
-        testForm.title_xpath = title_xpath
-        testForm.link_xpath = link_xpath
+        testForm.title_xpath = String(form.title_xpath || '').trim()
+        testForm.link_xpath = String(form.link_xpath || '').trim()
         testForm.time_xpath = String(form.time_xpath || '').trim()
         testForm.pagination_next_xpath = String(form.pagination_next_xpath || '').trim()
         isAiPreview.value = false
@@ -2200,6 +2210,25 @@ const handleTest = async (fromAi = false) => {
     testResultVisible.value = true
     testing.value = true
     
+    // 清除之前的历史数据并提示
+    testResults.items = []
+    testResults.html = ''
+    ElMessage.info({
+        message: '正在初始化测试环境，清除旧数据...',
+        duration: 1500,
+        grouping: true
+    })
+    
+    // 如果是编辑现有站点，物理清空数据库中的历史采集记录
+    if (form._id) {
+        try {
+            await clearScraperExecutions(form._id)
+            console.log('Database history cleared for scraper:', form._id)
+        } catch (e) {
+            console.warn('Failed to clear database history:', e)
+        }
+    }
+    
     try {
         const res = await testScraper(payload)
         testResults.items = res.items
@@ -2235,6 +2264,8 @@ const confirmAiRules = () => {
     form.pagination_next_xpath = testForm.pagination_next_xpath
     
     isAiPreview.value = false
+    testResultVisible.value = false
+    activeTab.value = 'rules'
     ElMessage.success('AI 规则已正式应用到配置')
 }
 

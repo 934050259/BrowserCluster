@@ -40,6 +40,7 @@
 
         <el-form-item label="解析类型" style="width: 220px;">
           <el-select v-model="filterForm.parser_type" placeholder="选择解析类型" clearable @change="handleFilter">
+            <el-option label="不解析" value="none" />
             <el-option label="智能解析 (GNE)" value="gne" />
             <el-option label="大模型提取 (LLM)" value="llm" />
             <el-option label="自定义规则 (XPath)" value="xpath" />
@@ -70,7 +71,7 @@
         </el-table-column>
         <el-table-column prop="parser_type" label="解析类型" width="120">
           <template #default="{ row }">
-            <el-tag :type="getParserTypeTag(row.parser_type)">{{ row.parser_type.toUpperCase() }}</el-tag>
+            <el-tag :type="getParserTypeTag(row.parser_type)">{{ row.parser_type === 'none' ? '不解析' : row.parser_type.toUpperCase() }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="提取模式" width="120">
@@ -268,6 +269,7 @@
                 <div class="section-title">解析模式选择</div>
                 <el-form-item label="解析模式">
                   <el-radio-group v-model="form.parser_type" size="default">
+                    <el-radio-button label="none">不解析</el-radio-button>
                     <el-radio-button label="gne">智能解析 (GNE)</el-radio-button>
                     <el-radio-button label="llm">大模型提取 (LLM)</el-radio-button>
                     <el-radio-button label="xpath">自定义规则 (XPath)</el-radio-button>
@@ -275,7 +277,7 @@
                 </el-form-item>
               </div>
 
-              <div class="section-group">
+              <div class="section-group" v-if="form.parser_type !== 'none'">
                 <div class="section-title">解析详细配置</div>
                 <!-- GNE Config -->
                 <div v-if="form.parser_type === 'gne'" class="parser-config-area">
@@ -962,6 +964,9 @@ const getParserTypeTag = (type) => {
 }
 
 const getExtractionModeText = (row) => {
+  if (row.parser_type === 'none') {
+    return '-'
+  }
   if (row.parser_type === 'gne') {
     return '详情模式'
   }
