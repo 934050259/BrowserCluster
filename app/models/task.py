@@ -171,3 +171,4 @@ class StatsResponse(BaseModel):
     today_hourly: Optional[List[Dict[str, Any]]] = None  # 今日分时数据
     nodes: Optional[Dict[str, Any]] = None  # 节点统计数据
     system_load: Optional[float] = 0.0  # 系统负载 (0-100)
+    total_scraped: Optional[int] = 0  # 历史总抓取量 (scraper_executions 中的总提取项)

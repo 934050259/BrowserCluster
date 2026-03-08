@@ -165,6 +165,9 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
             # 负载不应超过 100% (理论上可能，但这里做个限制显示)
             system_load = min(system_load, 100.0)
 
+    # 7. 获取历史总抓取量 (汇总 tasks 集合中的抓取成功任务数)
+    total_scraped = mongo.tasks.count_documents({"status": "success"})
+
     return StatsResponse(
         today=today_stats,
         yesterday=yesterday_stats,
@@ -173,5 +176,6 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
         history=history_data,
         today_hourly=today_hourly_data,
         nodes=nodes_stats,
-        system_load=system_load
+        system_load=system_load,
+        total_scraped=total_scraped
     )

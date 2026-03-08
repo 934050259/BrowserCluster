@@ -10,6 +10,7 @@ export const useStatsStore = defineStore('stats', {
       queue: { pending: 0, processing: 0, success: 0, failed: 0 },
       nodes: { total: 0, active: 0, inactive: 0 },
       system_load: 0,
+      total_scraped: 0,
       history: [],
       today_hourly: []
     },

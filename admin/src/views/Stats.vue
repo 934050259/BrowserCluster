@@ -85,7 +85,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useStatsStore } from '../stores/stats'
 import * as echarts from 'echarts'
-import { Timer, Checked, CircleClose, DataLine, CaretTop, CaretBottom } from '@element-plus/icons-vue'
+import { Timer, Checked, CircleClose, DataLine, CaretTop, CaretBottom, MagicStick } from '@element-plus/icons-vue'
 
 const statsStore = useStatsStore()
 const chartRef = ref(null)
@@ -99,7 +99,7 @@ const statCards = computed(() => [
   { label: '今日任务总量', value: stats.value.today.total, icon: DataLine, type: 'primary', unit: '', trend: stats.value.trends.total },
   { label: '成功处理', value: stats.value.today.success, icon: Checked, type: 'success', unit: '', trend: stats.value.trends.success },
   { label: '失败记录', value: stats.value.today.failed, icon: CircleClose, type: 'danger', unit: '', trend: stats.value.trends.failed },
-  { label: '平均响应时间', value: stats.value.today.avg_duration?.toFixed(2) || 0, icon: Timer, type: 'warning', unit: 's', trend: stats.value.trends.avg_duration }
+  { label: '累计抓取数据', value: stats.value.total_scraped || 0, icon: MagicStick, type: 'warning', unit: '条', trend: undefined }
 ])
 
 const queueItems = computed(() => [
