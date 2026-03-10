@@ -1069,13 +1069,13 @@ class Scraper:
             return error_result
 
         finally:
-            # 确保关闭页面和上下文
+            # 确保关闭页面和上下文，释放资源
             try:
-                if page and context:
-                    # 关闭上下文（会自动关闭页面）
+                if context:
+                    # 关闭上下文会自动关闭其下所有页面
                     await context.close()
                 elif page:
-                    # 只关闭页面
+                    # 兜底：如果只有页面创建成功但上下文丢失（理论上不会）
                     await page.close()
             except Exception as e:
                 # 忽略关闭时的错误，通常是因为浏览器已经关闭

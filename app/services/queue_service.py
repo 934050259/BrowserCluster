@@ -188,25 +188,32 @@ class RabbitMQService:
                 logger.error(f"Error in consumer: {e}")
                 time.sleep(5)
             finally:
-                if channel and not channel.is_closed:
-                    try:
-                        channel.stop_consuming()
-                    except:
-                        pass
+                # 线程安全地关闭当前线程的连接
+                self.close()
 
     def ack_message(self, channel, delivery_tag):
         """线程安全地确认消息"""
-        if channel and not channel.is_closed and self._connection and not self._connection.is_closed:
-            self._connection.add_callback_threadsafe(
-                lambda: channel.basic_ack(delivery_tag=delivery_tag)
-            )
+        if channel and not channel.is_closed:
+            try:
+                conn = channel.connection
+                if conn and not conn.is_closed:
+                    conn.add_callback_threadsafe(
+                        lambda: channel.basic_ack(delivery_tag=delivery_tag)
+                    )
+            except Exception as e:
+                logger.error(f"Failed to schedule basic_ack: {e}")
 
     def nack_message(self, channel, delivery_tag, requeue=True):
         """线程安全地拒绝消息"""
-        if channel and not channel.is_closed and self._connection and not self._connection.is_closed:
-            self._connection.add_callback_threadsafe(
-                lambda: channel.basic_nack(delivery_tag=delivery_tag, requeue=requeue)
-            )
+        if channel and not channel.is_closed:
+            try:
+                conn = channel.connection
+                if conn and not conn.is_closed:
+                    conn.add_callback_threadsafe(
+                        lambda: channel.basic_nack(delivery_tag=delivery_tag, requeue=requeue)
+                    )
+            except Exception as e:
+                logger.error(f"Failed to schedule basic_nack: {e}")
 
     def close(self):
         """关闭 RabbitMQ 连接"""
