@@ -60,6 +60,7 @@ class ScrapeRequest(BaseModel):
     schedule_id: Optional[str] = None  # 所属定时任务 ID (如果是定时任务触发的)
     retry_enabled: Optional[bool] = None  # 是否启用自动重试 (None 则使用系统全局配置)
     max_retries: Optional[int] = None  # 最大重试次数 (None 则使用系统全局配置)
+    execution_type: str = "production"  # 执行类型: production, test
 
 
 class TaskMetadata(BaseModel):
@@ -121,6 +122,7 @@ class TaskModel(BaseModel):
     retry_count: int = 0  # 当前重试次数
     retry_enabled: bool = True  # 是否启用重试
     max_retries: int = 3  # 最大重试次数
+    execution_type: str = "production"  # 执行类型: production, test
     created_at: datetime = Field(default_factory=datetime.now)  # 创建时间
     updated_at: datetime = Field(default_factory=datetime.now)  # 更新时间
     completed_at: Optional[datetime] = None  # 完成时间
@@ -135,6 +137,7 @@ class TaskResponse(BaseModel):
     retry_count: int = 0  # 当前重试次数
     retry_enabled: bool = True  # 是否启用重试
     max_retries: int = 3  # 最大重试次数
+    execution_type: str = "production"  # 执行类型: production, test
     params: Optional[Dict[str, Any]] = None  # 抓取参数
     priority: Optional[int] = 1  # 优先级
     cache: Optional[Dict[str, Any]] = None  # 缓存配置

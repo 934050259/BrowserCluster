@@ -6,7 +6,7 @@
           <div class="header-left">
             <el-button @click="goBack" circle :icon="ArrowLeft" class="back-btn" />
             <div class="header-breadcrumb">
-              <span class="parent-title" @click="goBack">定时任务</span>
+              <span class="parent-title" @click="goBack">站点采集</span>
               <el-icon class="separator"><ArrowRight /></el-icon>
               <span class="current-title">采集记录</span>
               <el-tag v-if="scheduleName" size="small" effect="plain" class="schedule-badge">
@@ -43,6 +43,13 @@
                 <el-radio-button label="processing">处理中</el-radio-button>
                 <el-radio-button label="success">成功</el-radio-button>
                 <el-radio-button label="failed">失败</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+
+            <el-form-item label="任务类型" class="ml-4">
+              <el-radio-group v-model="filterForm.execution_type" @change="handleFilter" size="default" class="segmented-control">
+                <el-radio-button label="production">正式采集</el-radio-button>
+                <el-radio-button label="test">测试任务</el-radio-button>
               </el-radio-group>
             </el-form-item>
             
@@ -102,7 +109,9 @@
             <div class="url-cell">
               <el-link :href="row.url" target="_blank" type="primary" :underline="false" class="url-link">
                 <el-icon><Link /></el-icon>
-                <span class="url-text">{{ row.url }}</span>
+                <el-tooltip :content="row.url" placement="top" :show-after="500">
+                  <span class="url-text">{{ row.url }}</span>
+                </el-tooltip>
               </el-link>
               <el-button 
                 link 
@@ -605,7 +614,8 @@ const selectedTasks = ref([])
 
 const filterForm = ref({
   status: '',
-  url: ''
+  url: '',
+  execution_type: 'production'
 })
 
 const showDetailDialog = ref(false)
@@ -665,6 +675,7 @@ const loadTasks = async () => {
       schedule_id: scheduleId.value,
       status: filterForm.value.status || undefined,
       url: filterForm.value.url || undefined,
+      execution_type: filterForm.value.execution_type,
       skip: (currentPage.value - 1) * pageSize.value,
       limit: pageSize.value
     }
@@ -700,7 +711,7 @@ const handleFilter = () => {
 }
 
 const resetFilter = () => {
-  filterForm.value = { status: '', url: '' }
+  filterForm.value = { status: '', url: '', execution_type: 'production' }
   handleFilter()
 }
 
@@ -1004,6 +1015,10 @@ watch(scheduleId, (newId) => {
 .url-text {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 500px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .copy-btn-hover {

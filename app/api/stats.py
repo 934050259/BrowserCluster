@@ -31,7 +31,8 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
     pipeline_today = [
         {
             "$match": {
-                "created_at": {"$gte": today_start, "$lt": tomorrow_start}
+                "created_at": {"$gte": today_start, "$lt": tomorrow_start},
+                "execution_type": {"$ne": "test"}
             }
         },
         {
@@ -51,7 +52,8 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
     pipeline_yesterday = [
         {
             "$match": {
-                "created_at": {"$gte": yesterday_start, "$lt": today_start}
+                "created_at": {"$gte": yesterday_start, "$lt": today_start},
+                "execution_type": {"$ne": "test"}
             }
         },
         {
@@ -98,19 +100,20 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
         "avg_duration": calculate_trend(today_stats["avg_duration"], yesterday_stats["avg_duration"])
     }
 
-    # 3. 统计各状态任务数量 (实时队列)
+    # 3. 统计各状态任务数量 (实时队列 - success/failed 仅统计正式采集)
     queue_stats = {
         "pending": mongo.tasks.count_documents({"status": "pending"}),
         "processing": mongo.tasks.count_documents({"status": "processing"}),
-        "success": mongo.tasks.count_documents({"status": "success"}),
-        "failed": mongo.tasks.count_documents({"status": "failed"})
+        "success": mongo.tasks.count_documents({"status": "success", "execution_type": {"$ne": "test"}}),
+        "failed": mongo.tasks.count_documents({"status": "failed", "execution_type": {"$ne": "test"}})
     }
 
     # 4. 获取历史统计 (最近 7 天，用于图表)
     history_pipeline = [
         {
             "$match": {
-                "created_at": {"$gte": now - timedelta(days=7)}
+                "created_at": {"$gte": today_start - timedelta(days=6)},
+                "execution_type": {"$ne": "test"}
             }
         },
         {
@@ -129,7 +132,8 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
     today_hourly_pipeline = [
         {
             "$match": {
-                "created_at": {"$gte": today_start, "$lt": tomorrow_start}
+                "created_at": {"$gte": today_start, "$lt": tomorrow_start},
+                "execution_type": {"$ne": "test"}
             }
         },
         {
@@ -166,7 +170,7 @@ async def get_stats(current_user: dict = Depends(get_current_user)):
             system_load = min(system_load, 100.0)
 
     # 7. 获取历史总抓取量 (汇总 tasks 集合中的抓取成功任务数)
-    total_scraped = mongo.tasks.count_documents({"status": "success"})
+    total_scraped = mongo.tasks.count_documents({"status": "success", "execution_type": {"$ne": "test"}})
 
     return StatsResponse(
         today=today_stats,

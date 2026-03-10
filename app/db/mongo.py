@@ -142,6 +142,16 @@ class MongoDB:
         """
         return self.db.users
 
+    @property
+    def scraper_executions(self):
+        """
+        获取采集记录集合
+
+        Returns:
+            Collection: scraper_executions 集合
+        """
+        return self.db.scraper_executions
+
 
 # 全局 MongoDB 实例
 mongo = MongoDB()

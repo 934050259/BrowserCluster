@@ -124,7 +124,7 @@ class RabbitMQService:
 
     def consume_tasks(
         self,
-        callback: Callable[[Dict[str, Any]], None],
+        callback: Callable[[Dict[str, Any], Any, Any], None],
         prefetch_count: int = 1,
         should_stop: Callable[[], bool] = None
     ):
@@ -144,18 +144,20 @@ class RabbitMQService:
                     """消息处理包装函数"""
                     try:
                         task = json.loads(body)
-                        callback(task)
-                        ch.basic_ack(delivery_tag=method.delivery_tag)
+                        # 将 channel 和 method 传递给回调，由回调负责 ack
+                        callback(task, ch, method)
                     except Exception as e:
-                        logger.error(f"Error processing task: {e}")
+                        logger.error(f"Error processing task wrapper: {e}")
                         try:
-                            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+                            # 解析错误等严重问题，直接 nack
+                            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
                         except:
                             pass
 
                 channel.basic_consume(
                     queue=settings.rabbitmq_queue,
-                    on_message_callback=wrapper
+                    on_message_callback=wrapper,
+                    auto_ack=False  # 显式关闭自动确认
                 )
 
                 logger.info("Started consuming tasks...")
@@ -191,6 +193,20 @@ class RabbitMQService:
                         channel.stop_consuming()
                     except:
                         pass
+
+    def ack_message(self, channel, delivery_tag):
+        """线程安全地确认消息"""
+        if channel and not channel.is_closed and self._connection and not self._connection.is_closed:
+            self._connection.add_callback_threadsafe(
+                lambda: channel.basic_ack(delivery_tag=delivery_tag)
+            )
+
+    def nack_message(self, channel, delivery_tag, requeue=True):
+        """线程安全地拒绝消息"""
+        if channel and not channel.is_closed and self._connection and not self._connection.is_closed:
+            self._connection.add_callback_threadsafe(
+                lambda: channel.basic_nack(delivery_tag=delivery_tag, requeue=requeue)
+            )
 
     def close(self):
         """关闭 RabbitMQ 连接"""

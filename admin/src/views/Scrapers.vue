@@ -396,8 +396,14 @@
                   <div class="input-tip">可选：用于自动翻页抓取的“下一页”按钮 XPath</div>
                 </el-form-item>
                 
-                <div class="rules-footer mt-4">
-                  <el-button type="warning" @click="handleTest(false)" :loading="testing" icon="VideoPlay">规则校验</el-button>
+                <div class="rules-footer mt-4 flex items-center justify-between">
+                  <div class="flex items-center">
+                    <el-button type="warning" @click="handleTest(false)" :loading="testing" icon="VideoPlay">规则校验</el-button>
+                    <el-checkbox v-model="triggerDetailTest" label="同时测试详情抓取" class="ml-4" />
+                    <el-tooltip content="开启后，校验列表页成功后将自动生成详情页抓取任务，用于测试详情解析规则。测试任务可在该站点的'详情'中查看。" placement="top">
+                      <el-icon class="ml-1 text-gray-400 cursor-help"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </div>
                   <span class="input-tip">建议在保存前校验 XPath 规则，确保能正确提取数据</span>
                 </div>
               </div>
@@ -950,7 +956,24 @@
         class="executions-dialog"
       >
         <div v-loading="dataLoading" class="dialog-inner">
-          <div class="stats-overview mb-6" v-if="scraperData.length > 0">
+          <div class="header-actions mb-4 flex justify-between items-center">
+            <el-radio-group v-model="dataType" @change="handleDataTypeChange">
+              <el-radio-button label="production">正式数据</el-radio-button>
+              <el-radio-button label="test">测试记录</el-radio-button>
+            </el-radio-group>
+            
+            <el-button 
+              v-if="dataType === 'test' && scraperData.length > 0" 
+              type="danger" 
+              plain 
+              size="small" 
+              @click="handleClearTest"
+            >
+              清空测试记录
+            </el-button>
+          </div>
+
+          <div class="stats-overview mb-6" v-if="scraperData.length > 0 && dataType === 'production'">
             <div class="stats-grid">
               <div class="stat-item">
                 <div class="stat-icon bg-blue-100 text-blue-600">
@@ -984,7 +1007,9 @@
             </div>
           </div>
 
-          <el-table :data="scraperData" stripe style="width: 100%" height="450" class="execution-table">
+          <el-empty v-if="scraperData.length === 0" description="暂无数据" />
+
+          <el-table v-else :data="scraperData" stripe style="width: 100%" height="450" class="execution-table">
             <el-table-column label="执行时间" min-width="250">
               <template #default="{ row }">
                 <div class="time-cell">
@@ -1039,12 +1064,20 @@
       <!-- 单次执行详情对话框 (展示 HTML 和 截图) -->
       <el-dialog
         v-model="executionDetailVisible"
-        title="执行详情预览"
+        :title="currentExecution?.execution_type === 'test' ? '执行详情预览 (测试记录)' : '执行详情预览'"
         width="1200px"
         top="5vh"
         append-to-body
       >
         <div v-if="currentExecution" v-loading="executionLoading">
+          <el-alert
+            v-if="currentExecution.execution_type === 'test'"
+            title="这是一条测试记录"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="mb-4"
+          />
           <el-descriptions border :column="2" class="mb-4">
             <el-descriptions-item label="任务名称">{{ currentExecution.scraper_name }}</el-descriptions-item>
             <el-descriptions-item label="执行引擎">{{ currentExecution.engine }}</el-descriptions-item>
@@ -1166,6 +1199,7 @@ const dataTotal = ref(0)
 const dataPage = ref(1)
 const dataPageSize = ref(20)
 const currentScraper = ref(null)
+const dataType = ref('production') // production or test
 
 // 统计计算
 const avgItems = computed(() => {
@@ -1194,8 +1228,39 @@ const activeExecutionTab = ref('items')
 const handleViewData = async (row) => {
     currentScraper.value = row
     dataPage.value = 1
+    dataType.value = 'production' // 默认查看正式数据
     dataDialogVisible.value = true
     fetchScraperData()
+}
+
+const handleDataTypeChange = () => {
+    dataPage.value = 1
+    fetchScraperData()
+}
+
+const handleClearTest = async () => {
+    if (!currentScraper.value) return
+    
+    ElMessageBox.confirm(
+        '确定要清空该站点的所有测试记录吗？此操作不可恢复。',
+        '清空确认',
+        {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning'
+        }
+    ).then(async () => {
+        try {
+            dataLoading.value = true
+            await clearScraperExecutions(currentScraper.value._id, 'test')
+            ElMessage.success('测试记录已清空')
+            fetchScraperData()
+        } catch (error) {
+            ElMessage.error('清空失败')
+        } finally {
+            dataLoading.value = false
+        }
+    })
 }
 
 const fetchScraperData = async () => {
@@ -1204,7 +1269,8 @@ const fetchScraperData = async () => {
     try {
         const res = await getScraperData(currentScraper.value._id, {
             page: dataPage.value,
-            page_size: dataPageSize.value
+            page_size: dataPageSize.value,
+            type: dataType.value
         })
         scraperData.value = res.items
         dataTotal.value = res.total
@@ -1328,8 +1394,8 @@ const handleRun = async (row) => {
     if (row.last_test_status === 'running') return
     
     ElMessageBox.confirm(
-        `确定要立即对站点 "${row.name}" 执行采集测试吗？`,
-        '测试确认',
+        `确定要立即对站点 "${row.name}" 执行采集任务吗？这将启动后台采集流程，数据将被标记为测试记录。`,
+        '运行确认',
         {
             confirmButtonText: '确定',
             cancelButtonText: '取消',
@@ -1338,12 +1404,12 @@ const handleRun = async (row) => {
     ).then(async () => {
         try {
             row.last_test_status = 'running' // 立即反馈
-            await runScraper(row._id)
-            ElMessage.success(`测试任务 "${row.name}" 已提交`)
+            await runScraper(row._id, 'test')
+            ElMessage.success(`测试任务 "${row.name}" 已提交后台运行`)
             startPolling() // 启动轮询
         } catch (error) {
             row.last_test_status = 'failed'
-            const errorMsg = error.response?.data?.detail || error.message || '测试任务提交失败'
+            const errorMsg = error.response?.data?.detail || error.message || '任务提交失败'
             ElMessage.error(errorMsg)
         }
     }).catch(() => {})
@@ -1424,6 +1490,7 @@ const submitting = ref(false)
 const isNavigating = ref(false)
 const testing = ref(false)
 const aiGenerating = ref(false)
+const triggerDetailTest = ref(false)
 const formRef = ref(null)
 const previewIframe = ref(null)
 
@@ -1919,6 +1986,15 @@ const handleAdd = async () => {
         enabled: true,
         cron: ''
     })
+    // 处理 cookies 格式
+    try {
+        if (form.params.cookies && typeof form.params.cookies === 'object') {
+            form.params.cookies = JSON.stringify(form.params.cookies, null, 2)
+        }
+    } catch (e) {
+        console.error('Failed to stringify cookies:', e)
+    }
+
     dialogVisible.value = true
 }
 
@@ -1942,9 +2018,18 @@ const handleEdit = async (row) => {
     if (!form.params) {
         form.params = {}
     }
-
-    // 统一补齐 params 内部字段
-    const defaultParams = {
+    
+    // 如果 cookies 是对象，转换为 JSON 字符串以在 textarea 显示
+    try {
+        if (form.params.cookies && typeof form.params.cookies === 'object') {
+            form.params.cookies = JSON.stringify(form.params.cookies, null, 2)
+        }
+    } catch (e) {
+        console.error('Failed to stringify cookies for edit:', e)
+    }
+    
+    // 补全可能缺失的字段
+    const defaults = {
         engine: 'playwright',
         wait_for: 'networkidle',
         wait_time: 3000,
@@ -1973,19 +2058,19 @@ const handleEdit = async (row) => {
     // 合并默认参数和现有参数
     // 注意：优先使用 row 中的顶级字段（如果存在旧数据格式）
     form.params = {
-        ...defaultParams,
+        ...defaults,
         ...form.params,
         // 兼容旧数据格式：如果 params 中没有，但 row 中有，则使用 row 中的
-        engine: form.params.engine || row.engine || defaultParams.engine,
-        wait_for: form.params.wait_for || row.wait_for || defaultParams.wait_for,
-        wait_time: form.params.wait_time !== undefined ? form.params.wait_time : (row.wait_time !== undefined ? row.wait_time : defaultParams.wait_time),
-        timeout: form.params.timeout || row.wait_timeout || row.timeout || defaultParams.timeout,
-        wait_for_selector: form.params.wait_for_selector || row.wait_for_selector || defaultParams.wait_for_selector,
-        user_agent: form.params.user_agent || row.user_agent || defaultParams.user_agent,
-        viewport: form.params.viewport || row.viewport || defaultParams.viewport,
-        stealth: form.params.stealth !== undefined ? form.params.stealth : (row.stealth !== undefined ? row.stealth : defaultParams.stealth),
-        no_css: form.params.no_css !== undefined ? form.params.no_css : (row.no_css !== undefined ? row.no_css : defaultParams.no_css),
-        block_images: form.params.block_images !== undefined ? form.params.block_images : (row.block_images !== undefined ? row.block_images : (row.no_images !== undefined ? row.no_images : defaultParams.block_images)),
+        engine: form.params.engine || row.engine || defaults.engine,
+        wait_for: form.params.wait_for || row.wait_for || defaults.wait_for,
+        wait_time: form.params.wait_time !== undefined ? form.params.wait_time : (row.wait_time !== undefined ? row.wait_time : defaults.wait_time),
+        timeout: form.params.timeout || row.wait_timeout || row.timeout || defaults.timeout,
+        wait_for_selector: form.params.wait_for_selector || row.wait_for_selector || defaults.wait_for_selector,
+        user_agent: form.params.user_agent || row.user_agent || defaults.user_agent,
+        viewport: form.params.viewport || row.viewport || defaults.viewport,
+        stealth: form.params.stealth !== undefined ? form.params.stealth : (row.stealth !== undefined ? row.stealth : defaults.stealth),
+        no_css: form.params.no_css !== undefined ? form.params.no_css : (row.no_css !== undefined ? row.no_css : defaults.no_css),
+        block_images: form.params.block_images !== undefined ? form.params.block_images : (row.block_images !== undefined ? row.block_images : (row.no_images !== undefined ? row.no_images : defaults.block_images)),
     }
 
     if (!form.cache) {
@@ -2046,6 +2131,21 @@ const submitForm = async () => {
             try {
                 // Remove empty optional fields
                 const data = JSON.parse(JSON.stringify(form))
+                
+                // 处理 params.cookies
+                // 如果输入的是 JSON 字符串，尝试解析回对象
+                if (data.params && data.params.cookies && typeof data.params.cookies === 'string') {
+                    const cookieStr = data.params.cookies.trim()
+                    if ((cookieStr.startsWith('{') && cookieStr.endsWith('}')) || 
+                        (cookieStr.startsWith('[') && cookieStr.endsWith(']'))) {
+                        try {
+                            data.params.cookies = JSON.parse(cookieStr)
+                        } catch (e) {
+                            // 解析失败，保持原字符串（可能是 key=value 格式）
+                            console.warn('Failed to parse cookies as JSON, keeping as string:', e)
+                        }
+                    }
+                }
                 
                 // 确保重试逻辑一致：如果关闭了重试开关，则重试次数强制为 0
                 if (data.retry_enabled === false) {
@@ -2147,6 +2247,7 @@ const handleAiGenerate = async () => {
 }
 
 const handleTest = async (fromAi = false) => {
+    console.log('handleTest triggered, fromAi:', fromAi);
     // 兼容处理：当通过 @click="handleTest" 调用时，第一个参数是 PointerEvent (也是 truthy)
     // 我们需要确保只有显式传入 true 时才认为是 AI 模式
     const isActuallyAi = fromAi === true;
@@ -2172,14 +2273,15 @@ const handleTest = async (fromAi = false) => {
 
     // 构建 Payload，优先使用 testForm 中的当前值 (因为用户可能在侧边栏进行了修改)
     const payload = {
-        url: String(form.url || '').trim(),
+        scraper_id: form._id || testForm._id,  // 传入 scraper_id 以便后端关联测试记录
+        url: String(testForm.url || form.url || '').trim(),
         list_xpath: String(testForm.list_xpath || '').trim(),
         title_xpath: String(testForm.title_xpath || '').trim(),
         link_xpath: String(testForm.link_xpath || '').trim(),
         time_xpath: String(testForm.time_xpath || '').trim(),
         pagination_next_xpath: String(testForm.pagination_next_xpath || '').trim(),
-        // 规则校验强制使用 DrissionPage (dp) 以获取最佳 HTML
-        engine: 'drissionpage', 
+        // 规则校验
+        engine: form.params.engine || 'drissionpage',
         wait_for: form.params.wait_for,
         wait_time: form.params.wait_time,
         wait_for_selector: form.params.wait_for_selector,
@@ -2191,7 +2293,8 @@ const handleTest = async (fromAi = false) => {
         proxy: form.params.proxy,
         proxy_pool_group: form.params.proxy_pool_group,
         cookies: form.params.cookies,
-        user_agent: form.params.user_agent
+        user_agent: form.params.user_agent,
+        trigger_details: triggerDetailTest.value
     }
 
     // 确保 testForm 与 payload 同步，这样 injectedHtml 才能使用正确的 XPath
@@ -2201,6 +2304,21 @@ const handleTest = async (fromAi = false) => {
          testForm.link_xpath = payload.link_xpath;
          testForm.time_xpath = payload.time_xpath;
          testForm.pagination_next_xpath = payload.pagination_next_xpath;
+    }
+
+    // 处理 params.cookies
+    // 如果输入的是 JSON 字符串，尝试解析回对象
+    if (payload.cookies && typeof payload.cookies === 'string') {
+        const cookieStr = payload.cookies.trim()
+        if ((cookieStr.startsWith('{') && cookieStr.endsWith('}')) || 
+            (cookieStr.startsWith('[') && cookieStr.endsWith(']'))) {
+            try {
+                payload.cookies = JSON.parse(cookieStr)
+            } catch (e) {
+                // 解析失败，保持原字符串
+                console.warn('Failed to parse cookies as JSON for test, keeping as string:', e)
+            }
+        }
     }
 
     console.log('Current testForm state:', JSON.parse(JSON.stringify(testForm)));
@@ -2222,20 +2340,36 @@ const handleTest = async (fromAi = false) => {
     // 如果是编辑现有站点，物理清空数据库中的历史采集记录
     if (form._id) {
         try {
-            await clearScraperExecutions(form._id)
-            console.log('Database history cleared for scraper:', form._id)
+            await clearScraperExecutions(form._id, 'test')
+            console.log('Database test history cleared for scraper:', form._id)
         } catch (e) {
-            console.warn('Failed to clear database history:', e)
+            console.warn('Failed to clear database test history:', e)
         }
+    } else {
+        // 如果是新站点 (无 _id)，则无法清除数据库，只清除本地状态
+        console.log('New scraper (no _id), skipping database history clear')
     }
     
     try {
+        console.log('Invoking testScraper API with payload:', payload);
         const res = await testScraper(payload)
+        console.log('testScraper API response:', res);
         testResults.items = res.items
         testResults.html = res.html
         htmlViewMode.value = 'render' 
         activeXPathField.value = ['list', 'title']
-        ElMessage.success(`校验成功，提取到 ${res.items.length} 条数据`)
+        
+        let msg = `校验成功，提取到 ${res.items.length} 条数据`
+        if (res.triggered_details) {
+            msg += '，并已触发详情页测试任务'
+        }
+        ElMessage.success(msg)
+        
+        // 如果测试成功且有数据，立即刷新一下采集记录列表（如果用户已经打开了数据弹窗）
+        if (dataDialogVisible.value && currentScraper.value && currentScraper.value._id === form._id) {
+            dataType.value = 'test' // 自动切换到测试数据
+            handleDataTypeChange()
+        }
     } catch (error) {
         console.error('testScraper error:', error);
         

@@ -30,6 +30,7 @@ class TaskService:
             "retry_count": 0,
             "retry_enabled": request.retry_enabled if request.retry_enabled is not None else settings.retry_enabled,
             "max_retries": request.max_retries if request.max_retries is not None else settings.max_retries,
+            "execution_type": request.execution_type,
             "cache": request.cache.model_dump(),
             "cache_key": cache_key,
             "cached": False,
@@ -47,6 +48,7 @@ class TaskService:
             "params": params,
             "cache": request.cache.model_dump(),
             "priority": request.priority,
+            "execution_type": request.execution_type,
             "retry_enabled": task_data["retry_enabled"],
             "max_retries": task_data["max_retries"]
         }
@@ -69,6 +71,7 @@ class TaskService:
             retry_count=0,
             retry_enabled=task_data["retry_enabled"],
             max_retries=task_data["max_retries"],
+            execution_type=request.execution_type,
             params=params,
             priority=request.priority,
             cache=request.cache.model_dump(),

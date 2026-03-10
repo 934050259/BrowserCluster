@@ -337,8 +337,8 @@ export const deleteScraper = async (id) => {
   return response.data
 }
 
-export const clearScraperExecutions = async (id) => {
-  const response = await api.delete(`/scrapers/${id}/data`)
+export const clearScraperExecutions = async (id, type = 'all') => {
+  const response = await api.delete(`/scrapers/${id}/data`, { params: { type } })
   return response.data
 }
 
@@ -352,8 +352,8 @@ export const aiGenerateRules = async (data) => {
   return response.data
 }
 
-export const runScraper = async (id) => {
-  const response = await api.post(`/scrapers/${id}/run`)
+export const runScraper = async (id, type = 'test') => {
+  const response = await api.post(`/scrapers/${id}/run`, null, { params: { type } })
   return response.data
 }
 

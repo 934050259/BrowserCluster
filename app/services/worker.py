@@ -35,17 +35,20 @@ class Worker:
         self.is_running = False  # 运行状态标志
         self.active_tasks = {}  # 当前正在处理的任务 ID -> 任务数据 映射
 
-    async def process_task(self, task_data: dict):
+    async def process_task(self, task_data: dict, channel=None, method=None):
         """
         处理单个任务
-
+        
         Args:
             task_data: 任务数据字典
+            channel: RabbitMQ 通道对象 (用于手动 ACK)
+            method: RabbitMQ 消息元数据 (用于手动 ACK)
         """
         # 提取任务信息
         task_id = task_data.get("task_id")
         url = task_data.get("url")
         params = task_data.get("params", {})
+        execution_type = task_data.get("execution_type", "production")
 
         if not task_id:
             return
@@ -143,7 +146,7 @@ class Worker:
 
         try:
             # 更新任务状态为处理中
-            await self._update_task_status(task_id, "processing", self.node_id)
+            await self._update_task_status(task_id, "processing", self.node_id, execution_type)
 
             # 执行抓取
             result = await scraper.scrape(url, params, self.node_id)
@@ -175,7 +178,7 @@ class Worker:
             # 处理抓取结果
             if result["status"] == "success":
                 # 更新任务状态为成功
-                await self._update_task_success(task_id, result, params)
+                await self._update_task_success(task_id, result, params, execution_type)
 
                 # 如果启用缓存，则保存结果到缓存
                 if task_data.get("cache", {}).get("enabled"):
@@ -218,10 +221,13 @@ class Worker:
                         await asyncio.sleep(settings.retry_delay)
                     
                     # 重新入队
+                    # 确保重试任务也携带 execution_type
+                    task_data["retry_count"] = new_retry_count
+                    task_data["status"] = "pending"
                     rabbitmq_service.publish_task(task_data)
                 else:
                     # 超过重试次数，标记为失败
-                    await self._update_task_failed(task_id, result["error"])
+                    await self._update_task_failed(task_id, result["error"], execution_type)
                     logger.error(f"Task {task_id} failed after {current_retry_count} retries: {result['error']}")
 
         except Exception as e:
@@ -247,14 +253,30 @@ class Worker:
                     if settings.retry_delay > 0:
                         await asyncio.sleep(settings.retry_delay)
                     
+                    # 确保重试任务也携带 execution_type
+                    task_data["retry_count"] = new_retry_count
+                    task_data["status"] = "pending"
                     rabbitmq_service.publish_task(task_data)
                 else:
-                    await self._update_task_failed(task_id, {"message": str(e)})
+                    await self._update_task_failed(task_id, {"message": str(e)}, execution_type)
             logger.error(f"Task {task_id} error: {e}", exc_info=True)
         finally:
             self.active_tasks.pop(task_id, None)
+            
+            # 手动确认消息
+            if channel and method:
+                try:
+                    # 如果 Worker 仍在运行，说明任务已处理完成（无论成功失败），确认消息
+                    if self.is_running:
+                        rabbitmq_service.ack_message(channel, method.delivery_tag)
+                    else:
+                        # 如果 Worker 已停止，说明任务可能被中断，拒绝消息并重新入队
+                        logger.info(f"Worker stopping, NACKing task {task_id} to requeue")
+                        rabbitmq_service.nack_message(channel, method.delivery_tag, requeue=True)
+                except Exception as e:
+                    logger.error(f"Failed to ACK/NACK task {task_id}: {e}")
 
-    async def _update_task_status(self, task_id: str, status: str, node_id: str = None):
+    async def _update_task_status(self, task_id: str, status: str, node_id: str = None, execution_type: str = "production"):
         """
         更新任务状态
 
@@ -262,6 +284,7 @@ class Worker:
             task_id: 任务 ID
             status: 任务状态
             node_id: 处理节点 ID
+            execution_type: 执行类型
         """
         mongo.tasks.update_one(
             {"task_id": task_id},
@@ -269,6 +292,7 @@ class Worker:
                 "$set": {
                     "status": status,
                     "node_id": node_id,
+                    "execution_type": execution_type,
                     "updated_at": datetime.now()
                 },
                 "$unset": {
@@ -277,7 +301,7 @@ class Worker:
             }
         )
 
-    async def _update_task_success(self, task_id: str, result: dict, params: dict = None):
+    async def _update_task_success(self, task_id: str, result: dict, params: dict = None, execution_type: str = "production"):
         """
         更新任务为成功状态
 
@@ -285,6 +309,7 @@ class Worker:
             task_id: 任务 ID
             result: 抓取结果
             params: 任务参数
+            execution_type: 执行类型
         """
         # 处理存储逻辑
         if params:
@@ -303,6 +328,15 @@ class Worker:
                 screenshot = result.get("screenshot")
                 
                 # 上传到 OSS (如果显式指定了 OSS，则强制上传，忽略全局开关)
+                # 如果是测试任务，OSS 路径增加 test/ 前缀
+                # 即使没有 custom_path，也要确保默认路径前缀为 test/
+                if execution_type == "test":
+                    if oss_path:
+                        if not oss_path.startswith("test/"):
+                            oss_path = f"test/{oss_path}"
+                    else:
+                        oss_path = "test/"
+                
                 html_url, screenshot_url = oss_service.upload_task_assets(task_id, html, screenshot, force=True, custom_path=oss_path)
                 
                 # 更新结果：OSS 存储时，移除原始 html/screenshot 字段，仅保留 oss_ 路径
@@ -327,6 +361,13 @@ class Worker:
             # 如果提供了 mongo_collection 或者明确指定了 storage_type 为 mongo
             if storage_type == "mongo":
                 target_collection = (mongo_collection or "tasks_results").strip()
+                
+                # 如果是测试执行，存入测试集合 (增加 test_ 前缀)
+                if execution_type == "test":
+                    if not target_collection.startswith("test_"):
+                        target_collection = f"test_{target_collection}"
+                    logger.info(f"Test task {task_id} will be saved to test collection: {target_collection}")
+
                 try:
                     # 确保集合名称合法且不为系统集合
                     if target_collection and not target_collection.startswith("system."):
@@ -336,6 +377,7 @@ class Worker:
                                 "task_id": task_id,
                                 "url": result.get("metadata", {}).get("url") or task_id,
                                 "result": result,
+                                "execution_type": execution_type,
                                 "timestamp": datetime.now()
                             })
                             logger.info(f"Task {task_id} result also saved to collection: {target_collection}")
@@ -348,6 +390,7 @@ class Worker:
                 "$set": {
                     "status": "success",
                     "result": result,
+                    "execution_type": execution_type,
                     "updated_at": datetime.now(),
                     "completed_at": datetime.now()
                 },
@@ -357,13 +400,14 @@ class Worker:
             }
         )
 
-    async def _update_task_failed(self, task_id: str, error: dict):
+    async def _update_task_failed(self, task_id: str, error: dict, execution_type: str = "production"):
         """
         更新任务为失败状态
 
         Args:
             task_id: 任务 ID
             error: 错误信息
+            execution_type: 执行类型
         """
         mongo.tasks.update_one(
             {"task_id": task_id},
@@ -371,6 +415,7 @@ class Worker:
                 "$set": {
                     "status": "failed",
                     "error": error,
+                    "execution_type": execution_type,
                     "updated_at": datetime.now(),
                     "completed_at": datetime.now()
                 }
@@ -403,9 +448,9 @@ class Worker:
             loop = asyncio.get_event_loop()
 
             # 定义消息队列的回调函数
-            def callback(task_data):
+            def callback(task_data, channel, method):
                 asyncio.run_coroutine_threadsafe(
-                    self.process_task(task_data),
+                    self.process_task(task_data, channel, method),
                     loop
                 )
 
@@ -511,15 +556,15 @@ class Worker:
                     }
                 )
                 
-                # 2. 重新发布任务消息到 RabbitMQ
-                for task_id, task_data in task_items:
-                    success = rabbitmq_service.publish_task(task_data)
-                    if success:
-                        logger.info(f"Task {task_id} successfully republished to RabbitMQ")
-                    else:
-                        logger.error(f"Failed to republish task {task_id} to RabbitMQ")
+                # 2. 不再手动发布任务，而是依赖 process_task 的 finally 块中的 NACK 机制自动重新入队
+                # for task_id, task_data in task_items:
+                #    success = rabbitmq_service.publish_task(task_data)
+                #    if success:
+                #        logger.info(f"Task {task_id} successfully republished to RabbitMQ")
+                #    else:
+                #        logger.error(f"Failed to republish task {task_id} to RabbitMQ")
 
-                logger.info(f"Successfully processed {len(task_ids)} tasks for rollback")
+                logger.info(f"Successfully processed {len(task_ids)} tasks for rollback (will be NACKed automatically)")
                 # 不主动清空 active_tasks，由各协程的 finally 块自行清理，
                 # 但由于 is_running 已为 False，后续的数据库更新操作会被跳过
             except Exception as e:

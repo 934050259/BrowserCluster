@@ -93,6 +93,7 @@ async def get_task(
         retry_count=task.get("retry_count", 0),
         retry_enabled=task.get("retry_enabled", True),
         max_retries=task.get("max_retries", 3),
+        execution_type=task.get("execution_type", "production"),
         params=task.get("params"),
         priority=task.get("priority"),
         cache=task.get("cache"),
@@ -110,6 +111,7 @@ async def list_tasks(
     status: str = None,
     url: str = None,
     schedule_id: str = None,
+    execution_type: str = "production",  # production, test, all
     cached: bool = None,
     skip: int = 0,
     limit: int = 50,
@@ -121,6 +123,7 @@ async def list_tasks(
     Args:
         status: 任务状态过滤（可选）
         url: 目标 URL 搜索（可选，模糊匹配）
+        execution_type: 执行类型过滤 (production, test, all)
         cached: 是否命中缓存过滤（可选）
         skip: 跳过的记录数
         limit: 返回的记录数
@@ -141,6 +144,12 @@ async def list_tasks(
         ]
     if cached is not None:
         query["cached"] = cached
+        
+    # 过滤执行类型
+    if execution_type == "production":
+        query["execution_type"] = {"$ne": "test"}
+    elif execution_type == "test":
+        query["execution_type"] = "test"
 
     # 查询任务列表，只返回指定字段
     projection = {
@@ -151,6 +160,7 @@ async def list_tasks(
             "cache": 1,
             "status": 1,
             "cached": 1,
+            "execution_type": 1,
             "node_id": 1,
             "created_at": 1,
             "updated_at": 1,
@@ -170,6 +180,7 @@ async def list_tasks(
                 "cache": task.get("cache", {"enabled": True, "ttl": 3600}),
                 "status": task["status"],
                 "cached": task.get("cached", False),
+                "execution_type": task.get("execution_type", "production"),
                 "node_id": task.get("node_id"),
                 "created_at": task["created_at"],
                 "updated_at": task["updated_at"],
@@ -267,6 +278,7 @@ async def retry_task(task_id: str, request: Optional[RetryRequest] = None):
         "task_id": task_id,
         "url": final_url,
         "params": final_params,
+        "execution_type": task.get("execution_type", "production"),
         "cache": final_cache,
         "priority": final_priority,
         "retry_enabled": task.get("retry_enabled", True),
@@ -289,6 +301,7 @@ async def retry_task(task_id: str, request: Optional[RetryRequest] = None):
         retry_count=0,
         retry_enabled=task.get("retry_enabled", True),
         max_retries=task.get("max_retries", 3),
+        execution_type=task.get("execution_type", "production"),
         params=final_params,
         priority=final_priority,
         cache=final_cache,

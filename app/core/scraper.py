@@ -842,6 +842,12 @@ class Scraper:
 
             # 设置 Cookies
             cookies = params.get("cookies")
+            if isinstance(cookies, str):
+                if (cookies.strip().startswith('{') or cookies.strip().startswith('[')):
+                    try:
+                        cookies = json.loads(cookies)
+                    except:
+                        logger.error(f"Error parsing cookies: {cookies}")
             if cookies:
                 try:
                     formatted_cookies = []
@@ -1138,7 +1144,56 @@ class Scraper:
                 proxy_pool_group=params.get("proxy_pool_group"),
                 user_agent=params.get("user_agent")
             )
-            
+
+            # 设置 Cookies
+            cookies = params.get("cookies")
+            if isinstance(cookies, str):
+                if (cookies.strip().startswith('{') or cookies.strip().startswith('[')):
+                    try:
+                        cookies = json.loads(cookies)
+                    except:
+                        logger.error(f"Error parsing cookies: {cookies}")
+            if cookies:
+                try:
+                    formatted_cookies = []
+                    parsed_url = urlparse(url)
+                    host = parsed_url.netloc.split(':')[0]
+                    domain_parts = host.split('.')
+                    if len(domain_parts) >= 2:
+                        main_domain = f".{'.'.join(domain_parts[-2:])}"
+                    else:
+                        main_domain = host
+                    if isinstance(cookies, str):
+                        for item in cookies.split(';'):
+                            item = item.strip()
+                            if not item: continue
+                            if '=' in item:
+                                name, value = item.split('=', 1)
+                                cookie_base = {
+                                    "name": name.strip(),
+                                    "value": value.strip(),
+                                    "domain": main_domain
+                                }
+                                formatted_cookies.append(cookie_base)
+                    elif isinstance(cookies, list):
+                        for cookie in cookies:
+                            if isinstance(cookie, dict) and "name" in cookie and "value" in cookie:
+                                if "domain" not in cookie: cookie["domain"] = main_domain
+                                if "path" not in cookie: cookie["path"] = "/"
+                                formatted_cookies.append(cookie)
+                    elif isinstance(cookies, dict):
+                        for name, value in cookies.items():
+                            formatted_cookies.append({
+                                "name": name,
+                                "value": str(value),
+                                "domain": main_domain,
+                            })
+                    
+                    if formatted_cookies:
+                        tab.set.cookies(formatted_cookies)
+                        logger.info(f"DrissionPage: Injected {len(formatted_cookies)} cookies")
+                except Exception as ce:
+                    logger.error(f"Failed to set cookies for DrissionPage: {ce}")
             # 在新标签页中访问 URL，并设置超时
             tab.get(url, timeout=timeout_s)
             

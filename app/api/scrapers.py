@@ -9,7 +9,7 @@ from app.db.mongo import mongo
 from app.core.auth import get_current_user
 from app.core.scraper import Scraper
 from app.core.scheduler import scraper_scheduler
-from app.services.scraper_service import execute_scraper_task
+from app.services.scraper_service import execute_scraper_task, create_detail_tasks
 from app.services.task_service import task_service
 from app.services.parser_service import parser_service
 from app.models.task import ScrapeRequest, ScrapeParams
@@ -127,6 +127,7 @@ async def ai_generate_rules(request: AiRuleGenerationRequest, current_user: dict
 
 @router.post("/test", response_model=dict)
 async def test_scraper(request: ScraperTestRequest, current_user: dict = Depends(get_current_user)):
+    logger.info(f"Received test_scraper request. ScraperID: {request.scraper_id}, Type: {type(request.scraper_id)}, TriggerDetails: {request.trigger_details}")
     try:
         # 1. 校验 XPath 语法
         xpaths_to_check = {
@@ -173,19 +174,67 @@ async def test_scraper(request: ScraperTestRequest, current_user: dict = Depends
         
         if result.get("status") == "failed":
             raise Exception(result.get("error"))
+
+        # 如果提供了 scraper_id，则保存测试记录 (execution_type='test')
+        if request.scraper_id:
+            if ObjectId.is_valid(request.scraper_id):
+                try:
+                    logger.info(f"Saving test execution for scraper {request.scraper_id}")
+                    execution_doc = {
+                        "scraper_id": ObjectId(request.scraper_id),
+                        "scraper_name": "Manual Test",
+                        "url": str(request.url),
+                        "page_num": 1,
+                        "status": "success",
+                        "error": None,
+                        "html": result.get("html"),
+                        "screenshot": None,
+                        "items_count": result.get("count", 0),
+                        "items": result.get("items", []),
+                        "duration": result.get("duration", 0),
+                        "engine": request.engine,
+                        "created_at": datetime.now(),
+                        "execution_type": "test"  # 标记为测试数据
+                    }
+                    res = mongo.scraper_executions.insert_one(execution_doc)
+                    logger.info(f"Test execution saved successfully with ID: {res.inserted_id}")
+                    
+                    # 如果请求触发详情任务测试
+                    if request.trigger_details and result.get("items"):
+                        scraper_doc = mongo.db.scrapers.find_one({"_id": ObjectId(request.scraper_id)})
+                        if scraper_doc:
+                            # 使用当前请求的 XPath 覆盖 scraper_doc 中的规则进行测试
+                            temp_doc = {
+                                **scraper_doc,
+                                "list_xpath": request.list_xpath,
+                                "title_xpath": request.title_xpath,
+                                "link_xpath": request.link_xpath,
+                                "time_xpath": request.time_xpath,
+                                "pagination_next_xpath": request.pagination_next_xpath
+                            }
+                            # 创建测试类型的详情任务
+                            detail_count = await create_detail_tasks(temp_doc, result.get("items"), execution_type="test")
+                            logger.info(f"Created {detail_count} test detail tasks for scraper {request.scraper_id}")
+                except Exception as e:
+                    logger.error(f"Failed to save test execution or trigger detail tasks: {e}", exc_info=True)
+            else:
+                 logger.warning(f"Skipping test execution save: scraper_id={request.scraper_id} is invalid")
+        else:
+            logger.info("Skipping test execution save: No scraper_id provided (New scraper test)")
             
         return {
             "status": "success",
             "html": result.get("html"), 
             "items": result.get("items", [])[:20], # Limit items for preview
-            "count": result.get("count", 0)
+            "count": result.get("count", 0),
+            "triggered_details": request.trigger_details
         }
     except Exception as e:
         logger.error(f"Scraper test failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{scraper_id}/run")
-async def run_scraper(scraper_id: str, current_user: dict = Depends(get_current_user)):
+async def run_scraper(scraper_id: str, type: str = "test", current_user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(scraper_id):
         raise HTTPException(status_code=400, detail="Invalid ID")
         
@@ -198,31 +247,64 @@ async def run_scraper(scraper_id: str, current_user: dict = Depends(get_current_
         raise HTTPException(status_code=400, detail="该站点已禁用，无法执行采集")
         
     # 后台执行采集任务
-    asyncio.create_task(execute_scraper_task(scraper_doc))
+    asyncio.create_task(execute_scraper_task(scraper_doc, execution_type=type))
     
-    return {"status": "success", "message": "Scraper task started in background"}
+    return {"status": "success", "message": f"Scraper task ({type}) started in background"}
 
 @router.delete("/{scraper_id}/data")
-async def clear_scraper_executions(scraper_id: str, current_user: dict = Depends(get_current_user)):
-    """清空站点的所有抓取历史记录"""
+async def clear_scraper_executions(
+    scraper_id: str, 
+    type: str = "all",  # all: 全部, test: 仅测试数据, production: 仅正式数据
+    current_user: dict = Depends(get_current_user)
+):
+    """清空站点的所有抓取历史记录（包括执行记录和关联任务）"""
     if not ObjectId.is_valid(scraper_id):
         raise HTTPException(status_code=400, detail="Invalid ID")
         
-    result = mongo.db.scraper_executions.delete_many({"scraper_id": ObjectId(scraper_id)})
+    query = {"scraper_id": ObjectId(scraper_id)}
     
-    # 同时可以考虑更新 scraper 状态
-    mongo.db.scrapers.update_one(
-        {"_id": ObjectId(scraper_id)},
-        {"$set": {"last_test_status": None, "last_test_error": None}}
-    )
+    # 根据 type 过滤删除范围
+    if type == "test":
+        query["execution_type"] = "test"
+    elif type == "production":
+        query["execution_type"] = {"$ne": "test"}
+        
+    # 1. 清除执行记录 (scraper_executions)
+    exec_result = mongo.scraper_executions.delete_many(query)
     
-    return {"status": "success", "deleted_count": result.deleted_count}
+    # 2. 清除由此站点触发的详情任务 (tasks)
+    task_deleted_count = 0
+    task_query = {"schedule_id": f"scraper_{scraper_id}"}
+    if type == "test":
+        task_query["execution_type"] = "test"
+    elif type == "production":
+        task_query["execution_type"] = {"$ne": "test"}
+    else:
+        # type="all" 时不需要 execution_type 过滤条件
+        pass
+    
+    task_result = mongo.tasks.delete_many(task_query)
+    task_deleted_count = task_result.deleted_count
+    
+    # 3. 重置站点状态 (仅当清理全部或仅正式数据时)
+    if type in ["all", "production"]:
+        mongo.db.scrapers.update_one(
+            {"_id": ObjectId(scraper_id)},
+            {"$set": {"last_test_status": None, "last_test_error": None}}
+        )
+    
+    return {
+        "status": "success", 
+        "deleted_executions": exec_result.deleted_count,
+        "deleted_tasks": task_deleted_count
+    }
 
 @router.get("/{scraper_id}/data")
 async def get_scraper_executions(
     scraper_id: str, 
     page: int = 1, 
     page_size: int = 50,
+    type: str = "production",  # production (default), test, all
     current_user: dict = Depends(get_current_user)
 ):
     """获取站点采集的执行记录列表"""
@@ -232,9 +314,15 @@ async def get_scraper_executions(
     skip = (page - 1) * page_size
     query = {"scraper_id": ObjectId(scraper_id)}
     
-    total = mongo.db.scraper_executions.count_documents(query)
+    # 过滤测试数据
+    if type == "production":
+        query["execution_type"] = {"$ne": "test"}
+    elif type == "test":
+        query["execution_type"] = "test"
+    
+    total = mongo.scraper_executions.count_documents(query)
     # 列表接口不返回 HTML、截图和完整抓取项，以节省流量
-    items = list(mongo.db.scraper_executions.find(
+    items = list(mongo.scraper_executions.find(
         query, 
         {"html": 0, "screenshot": 0, "items": 0}
     ).sort("created_at", -1).skip(skip).limit(page_size))
@@ -260,7 +348,7 @@ async def get_execution_detail(
     if not ObjectId.is_valid(execution_id):
         raise HTTPException(status_code=400, detail="Invalid ID")
         
-    doc = mongo.db.scraper_executions.find_one({"_id": ObjectId(execution_id)})
+    doc = mongo.scraper_executions.find_one({"_id": ObjectId(execution_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Execution not found")
         

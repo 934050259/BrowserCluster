@@ -91,6 +91,7 @@ class ScraperResponse(ScraperBase):
         json_encoders = {ObjectId: str}
 
 class ScraperTestRequest(BaseModel):
+    scraper_id: Optional[str] = None  # 站点 ID
     url: str
     list_xpath: str
     title_xpath: str
@@ -110,6 +111,7 @@ class ScraperTestRequest(BaseModel):
     proxy: Optional[Dict[str, Any]] = None
     proxy_pool_group: Optional[str] = None
     cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None
+    trigger_details: bool = False  # 是否触发详情任务测试
 
 class AiRuleGenerationRequest(BaseModel):
     url: str

@@ -116,18 +116,30 @@ class OSSService:
         screenshot_url = None
 
         # 确定基础路径
-        base_path = f"tasks/{task_id}"
+        # 默认路径: tasks/{task_id}/...
+        # 自定义路径: {custom_path}/{task_id}/...
+        
         if custom_path:
             # 确保自定义路径以 / 结尾
-            custom_path = custom_path if custom_path.endswith('/') else f"{custom_path}/"
-            base_path = f"{custom_path}{task_id}"
+            path_prefix = custom_path if custom_path.endswith('/') else f"{custom_path}/"
+            # 如果 custom_path 已经包含了 task_id (有些用户可能会这么做)，则不重复添加
+            if task_id in path_prefix:
+                base_path = path_prefix
+            else:
+                base_path = f"{path_prefix}{task_id}"
+        else:
+            base_path = f"tasks/{task_id}"
 
         if html:
             html_filename = f"{base_path}/index.html"
+            # 清理双斜杠
+            html_filename = html_filename.replace('//', '/')
             html_url = self.upload_content(html, html_filename, "text/html", force=force)
 
         if screenshot:
             screenshot_filename = f"{base_path}/screenshot.png"
+            # 清理双斜杠
+            screenshot_filename = screenshot_filename.replace('//', '/')
             screenshot_url = self.upload_content(screenshot, screenshot_filename, "image/png", force=force)
 
         return html_url, screenshot_url
