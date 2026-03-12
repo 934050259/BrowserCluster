@@ -64,34 +64,39 @@ class RabbitMQService:
 
         if self._connection is None or self._connection.is_closed or is_unhealthy:
             try:
-                # 使用 ConnectionParameters.from_url 解析 URL，这能提供更完整的配置选项
-                # 注意：某些旧版本的 pika 可能没有 from_url，此时回退到 URLParameters
-                try:
-                    params = pika.ConnectionParameters.from_url(settings.rabbitmq_url)
-                except (AttributeError, Exception):
-                    params = pika.URLParameters(settings.rabbitmq_url)
-
-                # 设置心跳和超时
-                params.heartbeat = settings.rabbitmq_heartbeat
-                params.blocked_connection_timeout = settings.rabbitmq_blocked_timeout
-                params.socket_timeout = 10
+                # 彻底重构参数解析逻辑，改用 ConnectionParameters 以支持 TCP Keepalive
+                # URLParameters 在某些版本中是不可变的或限制了属性设置，容易导致 AttributeError
+                url_p = pika.URLParameters(settings.rabbitmq_url)
                 
-                # 尝试设置 TCP Keepalive
+                # 创建显式的 ConnectionParameters
+                # 注意：某些版本的 pika 不支持在构造函数中直接传入 socket_options
+                params = pika.ConnectionParameters(
+                    host=url_p.host,
+                    port=url_p.port,
+                    virtual_host=url_p.virtual_host,
+                    credentials=url_p.credentials,
+                    heartbeat=settings.rabbitmq_heartbeat,
+                    blocked_connection_timeout=settings.rabbitmq_blocked_timeout,
+                    socket_timeout=10
+                )
+                
                 # 显式设置底层 socket 选项 (level, optname, value)
-                # SO_KEEPALIVE = 1 启用心跳
+                # SO_KEEPALIVE = 1 启用心跳，防止网络设备在空闲时静默关闭连接
                 try:
-                    if not hasattr(params, 'socket_options') or params.socket_options is None:
-                        params.socket_options = []
-                    
-                    # 只有当属性确实存在且可写时才添加
-                    params.socket_options.append((socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1))
+                    # 优先检查是否存在 socket_options 属性
+                    if hasattr(params, 'socket_options'):
+                        params.socket_options = [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
+                    else:
+                        logger.warning("pika.ConnectionParameters does not have 'socket_options' attribute")
                 except Exception as e:
                     logger.warning(f"Could not set socket_options on pika params: {e}")
                 
                 # 创建连接
-                logger.info(f"Connecting to RabbitMQ: {settings.rabbitmq_url.split('@')[-1]} (heartbeat={settings.rabbitmq_heartbeat}s, keepalive=True)")
+                connection_info = settings.rabbitmq_url.split('@')[-1]
+                logger.info(f"Attempting to connect to RabbitMQ: {connection_info} (heartbeat={settings.rabbitmq_heartbeat}s)")
                 self._connection = pika.BlockingConnection(params)
                 self._channel = self._connection.channel()
+                logger.info(f"Successfully established RabbitMQ connection and channel")
 
                 # 声明交换机
                 self._channel.exchange_declare(
@@ -112,11 +117,10 @@ class RabbitMQService:
                     queue=settings.rabbitmq_queue,
                     routing_key=settings.rabbitmq_queue
                 )
-                logger.info("Successfully connected to RabbitMQ")
+                logger.info(f"RabbitMQ connection and queue '{settings.rabbitmq_queue}' are ready")
             except Exception as e:
                 logger.error(f"Failed to connect to RabbitMQ: {e}")
-                self._connection = None
-                self._channel = None
+                self.close() # 清理残留
                 raise
 
         return self._channel
@@ -143,7 +147,7 @@ class RabbitMQService:
                     priority=task.get('priority', 1)  # 优先级
                 )
             )
-            logger.info(f"Published task {task.get('task_id')} to queue")
+            logger.info(f"Published task {task.get('task_id')} to queue '{settings.rabbitmq_queue}'")
             return True
         except (pika.exceptions.ConnectionClosed, pika.exceptions.StreamLostError, 
                 pika.exceptions.AMQPConnectionError, ConnectionResetError, OSError) as e:
@@ -152,11 +156,12 @@ class RabbitMQService:
             self.close()
             if retry:
                 logger.info("Retrying publish task with fresh connection...")
+                # 等待 1 秒再重试，给 RabbitMQ 一点反应时间
+                time.sleep(1)
                 return self.publish_task(task, retry=False)
             return False
         except Exception as e:
             logger.error(f"Failed to publish task due to unexpected error: {e}")
-            # 如果是预料之外的通道错误，也尝试清理
             self.close()
             return False
 
@@ -171,6 +176,7 @@ class RabbitMQService:
         """
         while True:
             if should_stop and should_stop():
+                logger.info("Consumer loop stopping: received stop signal")
                 break
 
             channel = None
@@ -194,28 +200,28 @@ class RabbitMQService:
                         except:
                             pass
 
-                channel.basic_consume(
+                consumer_tag = channel.basic_consume(
                     queue=settings.rabbitmq_queue,
                     on_message_callback=wrapper,
                     auto_ack=False  # 显式关闭自动确认
                 )
 
-                logger.info("Started consuming tasks...")
+                logger.info(f"Consumer registered (tag: {consumer_tag}). Waiting for tasks...")
                 
                 last_heartbeat_log = time.time()
                 while True:
                     if should_stop and should_stop():
-                        logger.info("Consumer loop: detected stop signal, exiting...")
+                        logger.info("Consumer inner loop: detected stop signal, exiting...")
                         return
                     
                     # 检查连接健康
                     if self._connection is None or self._connection.is_closed:
-                        logger.warning("Connection closed in inner consumer loop, breaking to reconnect...")
+                        logger.warning("Connection lost in consumer inner loop, breaking to reconnect...")
                         break
                     
-                    # 每 5 分钟打印一次心跳日志，证明消费者仍在运行且活跃
+                    # 每 5 分钟打印一次活跃日志
                     if time.time() - last_heartbeat_log > 300:
-                        logger.debug("RabbitMQ consumer loop is still alive and heartbeat is OK.")
+                        logger.info("RabbitMQ consumer is alive and waiting for messages...")
                         last_heartbeat_log = time.time()
 
                     try:
@@ -223,34 +229,34 @@ class RabbitMQService:
                         self._connection.process_data_events(time_limit=1.0)
                     except (pika.exceptions.ConnectionClosed, pika.exceptions.StreamLostError, 
                             pika.exceptions.AMQPConnectionError, ConnectionResetError, OSError) as e:
-                        logger.warning(f"RabbitMQ connection lost during consumption: {e}. Attempting to reconnect...")
-                        self._connection = None
-                        self._channel = None
+                        logger.warning(f"RabbitMQ connection lost during consumption: {e}. Reconnecting...")
+                        self.close()
                         break # 跳出内层循环，进入外层循环重连
                     except Exception as e:
-                        logger.error(f"Unexpected error in process_data_events: {e}")
-                        # 对于非连接错误，记录并稍后重试，避免进程崩溃
+                        logger.error(f"Unexpected error in consumer thread: {e}")
+                        # 记录错误并等待，防止在极端情况下疯狂刷日志
                         time.sleep(2)
-                        # 再次通过主动探测来检测连接是否由于该异常而失效
+                        # 尝试通过主动探测来恢复或触发连接断开
                         try:
                             if self._connection and not self._connection.is_closed:
                                 self._connection.process_data_events(time_limit=0)
                             else:
                                 break
                         except:
-                            self._connection = None
-                            self._channel = None
+                            self.close()
                             break
                 
             except (pika.exceptions.AMQPConnectionError, pika.exceptions.ConnectionClosed, 
                     ConnectionResetError, OSError) as e:
-                logger.error(f"RabbitMQ connection error: {e}. Retrying in 5 seconds...")
+                logger.error(f"RabbitMQ consumer connection failed: {e}. Retrying in 5 seconds...")
+                self.close()
                 time.sleep(5)
             except Exception as e:
-                logger.error(f"Error in consumer: {e}")
+                logger.error(f"Critical error in consumer thread: {e}")
+                self.close()
                 time.sleep(5)
             finally:
-                # 线程安全地关闭当前线程的连接
+                # 确保在异常发生时也关闭当前连接，防止句柄泄露
                 self.close()
 
     def ack_message(self, channel, delivery_tag):
