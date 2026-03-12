@@ -98,7 +98,23 @@ class BrowserManager:
         Returns:
             Browser: 浏览器实例
         """
-        if self._browser is None or not self._browser.is_connected():
+        # 增加更严格的存活检查
+        is_healthy = False
+        if self._browser and self._browser.is_connected():
+            try:
+                # 尝试创建一个临时的上下文来验证浏览器是否真正可用（处理僵尸进程）
+                temp_context = await self._browser.new_context()
+                await temp_context.close()
+                is_healthy = True
+            except Exception as e:
+                logger.warning(f"Browser connection check failed, will recreate: {e}")
+                try:
+                    await self._browser.close()
+                except:
+                    pass
+                self._browser = None
+
+        if not is_healthy:
             playwright = await self.get_playwright()
 
             # 浏览器类型映射
@@ -131,6 +147,7 @@ class BrowserManager:
                 ])
 
             # 启动浏览器
+            logger.info(f"Launching new {settings.browser_type} browser instance...")
             self._browser = await browser_type.launch(
                 headless=settings.headless,
                 args=launch_args

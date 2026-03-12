@@ -55,14 +55,21 @@ class Worker:
 
         # 动态重载配置，确保使用最新的 LLM 等设置
         try:
-            settings.load_from_db()
+            await asyncio.to_thread(settings.load_from_db)
         except Exception as e:
             logger.warning(f"Failed to reload settings from DB: {e}")
 
         # 检查是否匹配网站规则配置
         domain = urlparse(url).netloc
         # 获取匹配该域名的规则，按优先级排序
-        rules = list(mongo.parsing_rules.find({"is_active": True}).sort("priority", -1))
+        try:
+            rules = await asyncio.to_thread(
+                lambda: list(mongo.parsing_rules.find({"is_active": True}).sort("priority", -1))
+            )
+        except Exception as e:
+            logger.error(f"Failed to fetch rules from MongoDB: {e}")
+            rules = []
+        
         matched_rule = None
         
         for rule in rules:
@@ -121,7 +128,8 @@ class Worker:
             # 如果应用了规则中的配置，同步回数据库以便前端显示正确的代理/参数信息
             if applied_changes:
                 try:
-                    mongo.tasks.update_one(
+                    await asyncio.to_thread(
+                        mongo.tasks.update_one,
                         {"task_id": task_id},
                         {"$set": {"params": params}}
                     )
@@ -132,7 +140,12 @@ class Worker:
         logger.info(f"Processing task {task_id}: {url}")
         
         # 检查任务是否仍然存在于数据库中（可能已被删除）
-        task = mongo.tasks.find_one({"task_id": task_id})
+        try:
+            task = await asyncio.to_thread(mongo.tasks.find_one, {"task_id": task_id})
+        except Exception as e:
+            logger.error(f"Failed to find task in MongoDB: {e}")
+            return
+            
         if not task:
             logger.warning(f"Task {task_id} not found in database, it may have been deleted. Skipping.")
             return
@@ -217,17 +230,21 @@ class Worker:
                     logger.warning(f"Task {task_id} failed, retrying ({new_retry_count}/{max_retries}). Error: {result.get('error', {}).get('message')}")
                     
                     # 更新数据库中的重试次数和状态
-                    mongo.tasks.update_one(
-                        {"task_id": task_id},
-                        {
-                            "$set": {
-                                "retry_count": new_retry_count,
-                                "status": "pending",
-                                "updated_at": datetime.now()
-                            },
-                            "$unset": {"error": ""}
-                        }
-                    )
+                    try:
+                        await asyncio.to_thread(
+                            mongo.tasks.update_one,
+                            {"task_id": task_id},
+                            {
+                                "$set": {
+                                    "retry_count": new_retry_count,
+                                    "status": "pending",
+                                    "updated_at": datetime.now()
+                                },
+                                "$unset": {"error": ""}
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to update retry status in MongoDB: {e}")
                     
                     # 延迟重试
                     if settings.retry_delay > 0:
@@ -237,7 +254,7 @@ class Worker:
                     # 确保重试任务也携带 execution_type
                     task_data["retry_count"] = new_retry_count
                     task_data["status"] = "pending"
-                    rabbitmq_service.publish_task(task_data)
+                    await asyncio.to_thread(rabbitmq_service.publish_task, task_data)
                 else:
                     # 超过重试次数，标记为失败
                     await self._update_task_failed(task_id, result["error"], execution_type)
@@ -251,17 +268,21 @@ class Worker:
                     new_retry_count = current_retry_count + 1
                     logger.warning(f"Task {task_id} encountered exception, retrying ({new_retry_count}/{settings.max_retries}). Error: {e}")
                     
-                    mongo.tasks.update_one(
-                        {"task_id": task_id},
-                        {
-                            "$set": {
-                                "retry_count": new_retry_count,
-                                "status": "pending",
-                                "updated_at": datetime.now()
-                            },
-                            "$unset": {"error": ""}
-                        }
-                    )
+                    try:
+                        await asyncio.to_thread(
+                            mongo.tasks.update_one,
+                            {"task_id": task_id},
+                            {
+                                "$set": {
+                                    "retry_count": new_retry_count,
+                                    "status": "pending",
+                                    "updated_at": datetime.now()
+                                },
+                                "$unset": {"error": ""}
+                            }
+                        )
+                    except Exception as mongo_err:
+                        logger.error(f"Failed to update retry status after exception in MongoDB: {mongo_err}")
                     
                     if settings.retry_delay > 0:
                         await asyncio.sleep(settings.retry_delay)
@@ -269,7 +290,7 @@ class Worker:
                     # 确保重试任务也携带 execution_type
                     task_data["retry_count"] = new_retry_count
                     task_data["status"] = "pending"
-                    rabbitmq_service.publish_task(task_data)
+                    await asyncio.to_thread(rabbitmq_service.publish_task, task_data)
                 else:
                     await self._update_task_failed(task_id, {"message": str(e)}, execution_type)
             logger.error(f"Task {task_id} error: {e}", exc_info=True)
@@ -299,20 +320,24 @@ class Worker:
             node_id: 处理节点 ID
             execution_type: 执行类型
         """
-        mongo.tasks.update_one(
-            {"task_id": task_id},
-            {
-                "$set": {
-                    "status": status,
-                    "node_id": node_id,
-                    "execution_type": execution_type,
-                    "updated_at": datetime.now()
-                },
-                "$unset": {
-                    "error": ""
+        try:
+            await asyncio.to_thread(
+                mongo.tasks.update_one,
+                {"task_id": task_id},
+                {
+                    "$set": {
+                        "status": status,
+                        "node_id": node_id,
+                        "execution_type": execution_type,
+                        "updated_at": datetime.now()
+                    },
+                    "$unset": {
+                        "error": ""
+                    }
                 }
-            }
-        )
+            )
+        except Exception as e:
+            logger.error(f"Failed to update task status in MongoDB: {e}")
 
     async def _update_task_success(self, task_id: str, result: dict, params: dict = None, execution_type: str = "production"):
         """
@@ -386,32 +411,39 @@ class Worker:
                     if target_collection and not target_collection.startswith("system."):
                         # 避免重复保存到主 tasks 集合 (如果 target_collection 就是 tasks)
                         if target_collection != "tasks":
-                            mongo.db[target_collection].insert_one({
-                                "task_id": task_id,
-                                "url": result.get("metadata", {}).get("url") or task_id,
-                                "result": result,
-                                "execution_type": execution_type,
-                                "timestamp": datetime.now()
-                            })
+                            await asyncio.to_thread(
+                                mongo.db[target_collection].insert_one,
+                                {
+                                    "task_id": task_id,
+                                    "url": result.get("metadata", {}).get("url") or task_id,
+                                    "result": result,
+                                    "execution_type": execution_type,
+                                    "timestamp": datetime.now()
+                                }
+                            )
                             logger.info(f"Task {task_id} result also saved to collection: {target_collection}")
                 except Exception as e:
                     logger.error(f"Failed to save task {task_id} to collection {target_collection}: {e}")
 
-        mongo.tasks.update_one(
-            {"task_id": task_id},
-            {
-                "$set": {
-                    "status": "success",
-                    "result": result,
-                    "execution_type": execution_type,
-                    "updated_at": datetime.now(),
-                    "completed_at": datetime.now()
-                },
-                "$unset": {
-                    "error": ""
+        try:
+            await asyncio.to_thread(
+                mongo.tasks.update_one,
+                {"task_id": task_id},
+                {
+                    "$set": {
+                        "status": "success",
+                        "result": result,
+                        "execution_type": execution_type,
+                        "updated_at": datetime.now(),
+                        "completed_at": datetime.now()
+                    },
+                    "$unset": {
+                        "error": ""
+                    }
                 }
-            }
-        )
+            )
+        except Exception as e:
+            logger.error(f"Failed to update task success in MongoDB: {e}")
 
     async def _update_task_failed(self, task_id: str, error: dict, execution_type: str = "production"):
         """
@@ -422,18 +454,22 @@ class Worker:
             error: 错误信息
             execution_type: 执行类型
         """
-        mongo.tasks.update_one(
-            {"task_id": task_id},
-            {
-                "$set": {
-                    "status": "failed",
-                    "error": error,
-                    "execution_type": execution_type,
-                    "updated_at": datetime.now(),
-                    "completed_at": datetime.now()
+        try:
+            await asyncio.to_thread(
+                mongo.tasks.update_one,
+                {"task_id": task_id},
+                {
+                    "$set": {
+                        "status": "failed",
+                        "error": error,
+                        "execution_type": execution_type,
+                        "updated_at": datetime.now(),
+                        "completed_at": datetime.now()
+                    }
                 }
-            }
-        )
+            )
+        except Exception as e:
+            logger.error(f"Failed to update task failure in MongoDB: {e}")
 
     async def run(self):
         """
@@ -527,7 +563,8 @@ class Worker:
                 if not self.is_running:
                     break
                     
-                mongo.nodes.update_one(
+                await asyncio.to_thread(
+                    mongo.nodes.update_one,
                     {"node_id": self.node_id},
                     {"$set": {"last_seen": datetime.now(), "status": "running"}}
                 )
@@ -555,7 +592,8 @@ class Worker:
             logger.info(f"Worker {self.node_id} has {len(task_ids)} active tasks. Resetting status and republishing...")
             try:
                 # 1. 更新数据库状态为 pending
-                mongo.tasks.update_many(
+                await asyncio.to_thread(
+                    mongo.tasks.update_many,
                     {"task_id": {"$in": task_ids}},
                     {
                         "$set": {
@@ -593,7 +631,8 @@ class Worker:
             logger.error(f"Error closing browser for {self.node_id}: {e}")
 
         try:
-            mongo.nodes.update_one(
+            await asyncio.to_thread(
+                mongo.nodes.update_one,
                 {"node_id": self.node_id},
                 {"$set": {"status": "stopped"}}
             )
