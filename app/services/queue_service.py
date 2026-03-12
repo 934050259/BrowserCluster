@@ -51,10 +51,13 @@ class RabbitMQService:
         """
         if self._connection is None or self._connection.is_closed:
             try:
+                # 解析 URL 参数并增加心跳设置，防止长连接闲置被断开
+                params = pika.URLParameters(settings.rabbitmq_url)
+                params.heartbeat = settings.rabbitmq_heartbeat
+                params.blocked_connection_timeout = settings.rabbitmq_blocked_timeout
+                
                 # 创建连接
-                self._connection = pika.BlockingConnection(
-                    pika.URLParameters(settings.rabbitmq_url)
-                )
+                self._connection = pika.BlockingConnection(params)
                 self._channel = self._connection.channel()
 
                 # 声明交换机
@@ -167,8 +170,12 @@ class RabbitMQService:
                         logger.info("Consumer loop: detected stop signal, exiting...")
                         return
                     
+                    if self._connection is None or self._connection.is_closed:
+                        logger.warning("Connection closed in inner consumer loop, breaking to reconnect...")
+                        break
+
                     try:
-                        self._connection.process_data_events(time_limit=0.5)
+                        self._connection.process_data_events(time_limit=1.0)
                     except (pika.exceptions.ConnectionClosed, pika.exceptions.StreamLostError, 
                             pika.exceptions.AMQPConnectionError, ConnectionResetError, OSError) as e:
                         logger.warning(f"RabbitMQ connection lost during consumption: {e}. Attempting to reconnect...")
@@ -178,7 +185,10 @@ class RabbitMQService:
                     except Exception as e:
                         logger.error(f"Unexpected error in process_data_events: {e}")
                         # 对于非连接错误，记录并稍后重试，避免进程崩溃
-                        time.sleep(1)
+                        time.sleep(2)
+                        # 再次校验连接状态
+                        if self._connection is None or self._connection.is_closed:
+                            break
                 
             except (pika.exceptions.AMQPConnectionError, pika.exceptions.ConnectionClosed, 
                     ConnectionResetError, OSError) as e:

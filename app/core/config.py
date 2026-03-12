@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     rabbitmq_url: str = Field(default="amqp://guest:guest@localhost:5672/", description="RabbitMQ 消息队列连接 URL")
     rabbitmq_queue: str = Field(default="scrape_tasks", description="RabbitMQ 默认任务队列名称")
     rabbitmq_exchange: str = Field(default="browser_cluster", description="RabbitMQ 交换机名称")
+    rabbitmq_heartbeat: int = Field(default=60, description="RabbitMQ 连接心跳间隔 (秒)")
+    rabbitmq_blocked_timeout: int = Field(default=300, description="RabbitMQ 连接阻塞超时时间 (秒)")
 
     # 浏览器配置
     browser_type: str = Field(default="chromium", description="默认浏览器类型 (chromium, firefox, webkit)")

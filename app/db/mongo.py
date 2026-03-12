@@ -31,7 +31,13 @@ class MongoDB:
             Database: MongoDB 数据库实例
         """
         if self._client is None or force_reconnect:
-            self._client = MongoClient(settings.mongo_uri)
+            # 增加超时和心跳配置，确保长连接稳定性
+            self._client = MongoClient(
+                settings.mongo_uri,
+                serverSelectionTimeoutMS=5000,  # 5秒选择超时
+                socketTimeoutMS=10000,          # 10秒套接字超时
+                heartbeatFrequencyMS=10000      # 10秒一次心跳
+            )
             
         # 检查数据库名是否与配置一致，不一致则切换（支持热重载配置）
         if self._db is None or self._db.name != settings.mongo_db or force_reconnect:

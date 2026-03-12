@@ -148,8 +148,21 @@ class Worker:
             # 更新任务状态为处理中
             await self._update_task_status(task_id, "processing", self.node_id, execution_type)
 
-            # 执行抓取
-            result = await scraper.scrape(url, params, self.node_id)
+            # 获取任务超时设置 (默认使用全局配置，可被任务参数覆盖)
+            task_timeout = params.get("timeout", settings.default_timeout) / 1000 + 30  # 基础超时 + 30秒缓冲
+            
+            # 执行抓取 (增加整体超时控制)
+            try:
+                result = await asyncio.wait_for(
+                    scraper.scrape(url, params, self.node_id),
+                    timeout=task_timeout
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"Task {task_id} timed out after {task_timeout}s overall")
+                result = {
+                    "status": "failed",
+                    "error": {"message": f"Task execution timed out after {task_timeout}s", "type": "TimeoutError"}
+                }
 
             # 如果抓取成功且配置了解析服务，执行解析
             if result["status"] == "success" and params.get("parser"):
