@@ -151,6 +151,9 @@ class Worker:
             return
 
         self.active_tasks[task_id] = task_data
+        current_active_count = len(self.active_tasks)
+        logger.info(f"Processing task {task_id}: {url} (Active tasks: {current_active_count}/{settings.worker_concurrency})")
+        
         current_retry_count = task.get("retry_count", 0)
         
         # 优先使用任务级别的重试配置，如果没有则使用全局配置
@@ -164,34 +167,38 @@ class Worker:
             # 获取任务超时设置 (默认使用全局配置，可被任务参数覆盖)
             task_timeout = params.get("timeout", settings.default_timeout) / 1000 + 30  # 基础超时 + 30秒缓冲
             
-            # 执行抓取 (增加整体超时控制)
+            async def do_work():
+                # 1. 执行抓取
+                res = await scraper.scrape(url, params, self.node_id)
+                
+                # 2. 如果抓取成功且配置了解析服务，执行解析
+                if res["status"] == "success" and params.get("parser"):
+                    parser_type = params["parser"]
+                    parser_config = params.get("parser_config", {})
+                    html_content = res.get("html", "")
+                    
+                    if html_content:
+                        logger.info(f"Parsing content for task {task_id} using {parser_type}")
+                        parsed_data = await parser_service.parse(html_content, parser_type, parser_config, base_url=url)
+                        res["parsed_data"] = parsed_data
+                
+                return res
+
+            # 执行抓取与解析 (整体超时控制)
             try:
-                result = await asyncio.wait_for(
-                    scraper.scrape(url, params, self.node_id),
-                    timeout=task_timeout
-                )
+                result = await asyncio.wait_for(do_work(), timeout=task_timeout)
             except asyncio.TimeoutError:
                 logger.error(f"Task {task_id} timed out after {task_timeout}s overall")
                 result = {
                     "status": "failed",
                     "error": {"message": f"Task execution timed out after {task_timeout}s", "type": "TimeoutError"}
                 }
-
-            # 如果抓取成功且配置了解析服务，执行解析
-            if result["status"] == "success" and params.get("parser"):
-                parser_type = params["parser"]
-                parser_config = params.get("parser_config", {})
-                
-                # 即使 params["save_html"] 为 False，result["html"] 在 scraper 阶段也是存在的
-                # scraper 保证了 result["html"] 包含内容，解析服务需要这个内容
-                html_content = result.get("html", "")
-                
-                if not html_content:
-                    logger.warning(f"Task {task_id} successful but HTML content is empty, parser might fail")
-                
-                logger.info(f"Parsing content for task {task_id} using {parser_type}")
-                parsed_data = await parser_service.parse(html_content, parser_type, parser_config, base_url=url)
-                result["parsed_data"] = parsed_data
+            except Exception as e:
+                logger.error(f"Task {task_id} work failed with error: {e}")
+                result = {
+                    "status": "failed",
+                    "error": {"message": str(e), "type": type(e).__name__}
+                }
 
             # 这里重新判断是否需要保存html
             result["html"] = result.get("html", "") if params.get("save_html", True) else ""
@@ -503,15 +510,29 @@ class Worker:
                     loop
                 )
 
-            # 在线程池中运行阻塞式的消息队列消费
-            await loop.run_in_executor(
-                None,
-                lambda: rabbitmq_service.consume_tasks(
-                    callback,
-                    prefetch_count=settings.worker_concurrency,
-                    should_stop=lambda: not self.is_running
-                )
-            )
+            # 在线程池中运行阻塞式的消息队列消费，增加重试机制
+            while self.is_running:
+                logger.info(f"Worker {self.node_id} starting consumer thread...")
+                try:
+                    await loop.run_in_executor(
+                        None,
+                        lambda: rabbitmq_service.consume_tasks(
+                            callback,
+                            prefetch_count=settings.worker_concurrency,
+                            should_stop=lambda: not self.is_running
+                        )
+                    )
+                except Exception as e:
+                    if self.is_running:
+                        logger.error(f"Consumer thread crashed: {e}. Restarting in 5 seconds...")
+                        await asyncio.sleep(5)
+                    else:
+                        break
+                
+                # 如果 consume_tasks 正常返回但 worker 仍在运行，说明发生了某种退出
+                if self.is_running:
+                    logger.warning("Consumer thread exited unexpectedly. Restarting...")
+                    await asyncio.sleep(2)
 
         except KeyboardInterrupt:
             logger.info("Worker stopping...")

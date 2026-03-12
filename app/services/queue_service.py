@@ -8,6 +8,7 @@ import json
 import logging
 import threading
 import time
+import socket
 from typing import Dict, Any, Callable
 from app.core.config import settings
 
@@ -49,14 +50,46 @@ class RabbitMQService:
         Returns:
             Channel: RabbitMQ 通道
         """
-        if self._connection is None or self._connection.is_closed:
+        # 增加更严格的存活检查，如果连接虽然没关闭但已不可用（如由于心跳超时），也重新连接
+        is_unhealthy = False
+        if self._connection and not self._connection.is_closed:
             try:
-                # 解析 URL 参数并增加心跳设置，防止长连接闲置被断开
-                params = pika.URLParameters(settings.rabbitmq_url)
+                # 尝试调用 process_data_events 来验证连接活性
+                # 如果连接已经静默断开，这里通常会触发异常
+                self._connection.process_data_events(time_limit=0)
+            except Exception as e:
+                logger.warning(f"RabbitMQ existing connection health check failed: {e}")
+                is_unhealthy = True
+                self.close() # 彻底清理旧连接
+
+        if self._connection is None or self._connection.is_closed or is_unhealthy:
+            try:
+                # 使用 ConnectionParameters.from_url 解析 URL，这能提供更完整的配置选项
+                # 注意：某些旧版本的 pika 可能没有 from_url，此时回退到 URLParameters
+                try:
+                    params = pika.ConnectionParameters.from_url(settings.rabbitmq_url)
+                except (AttributeError, Exception):
+                    params = pika.URLParameters(settings.rabbitmq_url)
+
+                # 设置心跳和超时
                 params.heartbeat = settings.rabbitmq_heartbeat
                 params.blocked_connection_timeout = settings.rabbitmq_blocked_timeout
+                params.socket_timeout = 10
+                
+                # 尝试设置 TCP Keepalive
+                # 显式设置底层 socket 选项 (level, optname, value)
+                # SO_KEEPALIVE = 1 启用心跳
+                try:
+                    if not hasattr(params, 'socket_options') or params.socket_options is None:
+                        params.socket_options = []
+                    
+                    # 只有当属性确实存在且可写时才添加
+                    params.socket_options.append((socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1))
+                except Exception as e:
+                    logger.warning(f"Could not set socket_options on pika params: {e}")
                 
                 # 创建连接
+                logger.info(f"Connecting to RabbitMQ: {settings.rabbitmq_url.split('@')[-1]} (heartbeat={settings.rabbitmq_heartbeat}s, keepalive=True)")
                 self._connection = pika.BlockingConnection(params)
                 self._channel = self._connection.channel()
 
@@ -115,14 +148,16 @@ class RabbitMQService:
         except (pika.exceptions.ConnectionClosed, pika.exceptions.StreamLostError, 
                 pika.exceptions.AMQPConnectionError, ConnectionResetError, OSError) as e:
             logger.warning(f"RabbitMQ connection lost during publish: {e}")
-            self._connection = None
-            self._channel = None
+            # 彻底清理旧连接，强制下次 connect() 重新创建
+            self.close()
             if retry:
-                logger.info("Retrying publish task...")
+                logger.info("Retrying publish task with fresh connection...")
                 return self.publish_task(task, retry=False)
             return False
         except Exception as e:
             logger.error(f"Failed to publish task due to unexpected error: {e}")
+            # 如果是预料之外的通道错误，也尝试清理
+            self.close()
             return False
 
     def consume_tasks(
@@ -147,6 +182,8 @@ class RabbitMQService:
                     """消息处理包装函数"""
                     try:
                         task = json.loads(body)
+                        task_id = task.get("task_id", "unknown")
+                        logger.info(f"Consumer received task {task_id}")
                         # 将 channel 和 method 传递给回调，由回调负责 ack
                         callback(task, ch, method)
                     except Exception as e:
@@ -165,16 +202,24 @@ class RabbitMQService:
 
                 logger.info("Started consuming tasks...")
                 
+                last_heartbeat_log = time.time()
                 while True:
                     if should_stop and should_stop():
                         logger.info("Consumer loop: detected stop signal, exiting...")
                         return
                     
+                    # 检查连接健康
                     if self._connection is None or self._connection.is_closed:
                         logger.warning("Connection closed in inner consumer loop, breaking to reconnect...")
                         break
+                    
+                    # 每 5 分钟打印一次心跳日志，证明消费者仍在运行且活跃
+                    if time.time() - last_heartbeat_log > 300:
+                        logger.debug("RabbitMQ consumer loop is still alive and heartbeat is OK.")
+                        last_heartbeat_log = time.time()
 
                     try:
+                        # 定期轮询事件（包括心跳和消息投递）
                         self._connection.process_data_events(time_limit=1.0)
                     except (pika.exceptions.ConnectionClosed, pika.exceptions.StreamLostError, 
                             pika.exceptions.AMQPConnectionError, ConnectionResetError, OSError) as e:
@@ -186,8 +231,15 @@ class RabbitMQService:
                         logger.error(f"Unexpected error in process_data_events: {e}")
                         # 对于非连接错误，记录并稍后重试，避免进程崩溃
                         time.sleep(2)
-                        # 再次校验连接状态
-                        if self._connection is None or self._connection.is_closed:
+                        # 再次通过主动探测来检测连接是否由于该异常而失效
+                        try:
+                            if self._connection and not self._connection.is_closed:
+                                self._connection.process_data_events(time_limit=0)
+                            else:
+                                break
+                        except:
+                            self._connection = None
+                            self._channel = None
                             break
                 
             except (pika.exceptions.AMQPConnectionError, pika.exceptions.ConnectionClosed, 
@@ -227,10 +279,18 @@ class RabbitMQService:
 
     def close(self):
         """关闭 RabbitMQ 连接"""
-        if self._channel and not self._channel.is_closed:
-            self._channel.close()
-        if self._connection and not self._connection.is_closed:
-            self._connection.close()
+        try:
+            if self._channel and not self._channel.is_closed:
+                self._channel.close()
+        except Exception:
+            pass
+            
+        try:
+            if self._connection and not self._connection.is_closed:
+                self._connection.close()
+        except Exception:
+            pass
+            
         self._channel = None
         self._connection = None
 
