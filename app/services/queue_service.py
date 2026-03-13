@@ -293,6 +293,11 @@ class RabbitMQService:
             
         try:
             if self._connection and not self._connection.is_closed:
+                # 显式移除所有心跳和超时器，防止在关闭连接时 pika 内部抛出异常
+                try:
+                    self._connection.process_data_events(time_limit=0)
+                except:
+                    pass
                 self._connection.close()
         except Exception:
             pass

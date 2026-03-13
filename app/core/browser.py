@@ -164,8 +164,16 @@ class BrowserManager:
         Returns:
             Page: 浏览器页面实例
         """
-        browser = await self.get_browser()
-        return await browser.new_page()
+        try:
+            browser = await self.get_browser()
+            return await browser.new_page()
+        except Exception as e:
+            logger.error(f"Failed to create new page, browser might be dead: {e}")
+            # 如果创建页面失败，强制清理浏览器实例，下次调用 get_browser 会重启
+            self._browser = None
+            # 再次尝试（get_browser 会重建）
+            browser = await self.get_browser()
+            return await browser.new_page()
 
     async def check_idle_browser(self):
         """
