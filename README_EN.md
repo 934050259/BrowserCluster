@@ -15,7 +15,7 @@
   <strong>Contact the author, welcome to join the project exchange group~</strong><br>
 </p>
 
-**Browser Cluster** is a high-performance, distributed browser automation cluster system built on **Playwright**, **DrissionPage**, and FastAPI. It supports large-scale concurrent web scraping, screenshots, parsing, and automation. It features a **built-in intelligent proxy pool and automatic detection mechanism**, specifically optimized for difficult anti-scraping websites like Cloudflare. It provides comprehensive task scheduling, result caching, node monitoring, and proxy status maintenance.
+**Browser Cluster** is a high-performance, distributed browser automation cluster system built on **Playwright**, **DrissionPage**, and FastAPI. It supports large-scale concurrent web scraping, screenshots, parsing, and automation. It features a **built-in intelligent proxy pool and account/cookie pool management mechanism**, supporting automatic detection and rate limiting. It is specifically optimized for difficult anti-scraping websites like Cloudflare, providing comprehensive task scheduling, result caching, node monitoring, and resource status maintenance.
 
 ![UI Preview](admin/public/image.png)
 
@@ -41,6 +41,12 @@
     - **Multi-level Proxy Inheritance**: Scraping tasks can automatically inherit proxy pools configured in parsing rules, simplifying the configuration process.
     - **One-click Full Detection**: Supports manual triggering or scheduled automatic detection of proxy availability.
     - **Automatic Status Maintenance**: Automatically circuit-breaks unavailable proxies based on detection results to ensure a high success rate for scraping tasks.
+- **Intelligent Account/Cookie Pool Management**:
+    - **Multi-account Management**: Store cookies for multiple accounts across different domains.
+    - **Automatic Scheduling & Rotation**: Specify a cookie group for scraping tasks, and the system automatically rotates accounts.
+    - **Rate Limiting**: Built-in Redis-based rate limiting to prevent individual accounts from being banned due to excessive requests.
+    - **Automatic Validity Check**: Periodically check cookie validity and automatically remove or flag expired ones.
+    - **Batch Import/Export**: Support batch import and export of cookie data in JSON format.
 - **High-Availability Distributed Worker**:
     - **Auto-reconnection Mechanism**: Workers can automatically reconnect to RabbitMQ upon disconnection, effectively handling network fluctuations.
     - **Multi-instance Load Balancing**: Supports multiple Worker instances running simultaneously, automatically competing for task queue processing.
@@ -344,7 +350,9 @@ This is the core interface, supporting synchronous scraping and returning render
 | `save_html` | bool | `true` | Whether to save HTML source code |
 | `engine` | string | `playwright` | Browser engine: `playwright` or `drissionpage` |
 | `proxy` | object | `null` | Proxy server config: `{"server": "...", "username": "...", "password": "..."}` |
+| `proxy_pool_group` | string | `null` | Proxy pool group name, system will automatically pick a proxy from this group |
 | `cookies` | string/obj/list | `null` | Inject Cookies. Supports string, JSON object, or JSON array. |
+| `cookie_group` | string | `null` | Cookie pool group name, system will automatically assign an account and inject its cookie |
 | `parser` | string | `null` | Parser type: `gne`, `xpath`, `llm` |
 | `parser_config` | object | `null` | Parser config.<br>• **gne**: `{"mode": "detail"}` or `{"mode": "list"}`.<br>• **llm**: `{"fields": ["title", "price"]}` is required. |
 

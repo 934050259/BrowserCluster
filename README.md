@@ -15,7 +15,7 @@
   <strong>联系作者，欢迎加入项目交流群~</strong><br>
 </p>
 
-**Browser Cluster** 是一个高性能、分布式的浏览器自动化集群系统，基于 **Playwright** 和 **DrissionPage** 双浏览器引擎以及 FastAPI 构建。它支持大规模并发网页抓取、截图、解析及自动化操作，具备**内置智能代理池与自动检测机制**，特别针对 Cloudflare 等高难度反爬网站进行了深度优化，提供完善的任务调度、结果缓存、节点监控及代理状态维护功能。
+**Browser Cluster** 是一个高性能、分布式的浏览器自动化集群系统，基于 **Playwright** 和 **DrissionPage** 双浏览器引擎以及 FastAPI 构建。它支持大规模并发网页抓取、截图、解析及自动化操作，具备**内置智能代理池与账号 Cookie 池管理机制**，支持自动检测与频率控制，特别针对 Cloudflare 等高难度反爬网站进行了深度优化，提供完善的任务调度、结果缓存、节点监控及资源状态维护功能。
 
 ![UI Preview](admin/public/image.png)
 
@@ -41,6 +41,12 @@
     - **多级代理继承**：采集任务可自动继承解析规则中配置的代理池，简化配置流程。
     - **一键全量检测**：支持手动触发或定时自动检测代理可用性。
     - **状态自动维护**：根据检测结果自动熔断不可用代理，确保采集任务的高成功率。
+- **智能账号/Cookie 池管理**：
+    - **多账号管理**：支持针对不同域名存储多个账号的 Cookie。
+    - **自动调度与轮询**：抓取任务可指定 Cookie 分组，系统自动实现账号轮询。
+    - **频率控制 (Rate Limiting)**：内置基于 Redis 的频率限制，防止单个账号抓取过快导致封号。
+    - **有效性自动检测**：定期自动检测 Cookie 有效性，失效后自动剔除或提醒。
+    - **一键导入导出**：支持 JSON 格式批量导入导出 Cookie 数据。
 - **高可用分布式 Worker**：
     - **自动重连机制**：Worker 具备 RabbitMQ 连接断开自动重连能力，有效应对网络波动。
     - **多实例负载均衡**：支持多个 Worker 实例同时运行，自动竞争处理任务队列。
@@ -343,7 +349,9 @@ docker run -d `
 | `save_html` | bool | `true` | 是否保存 HTML 源码 |
 | `engine` | string | `playwright` | 浏览器引擎：`playwright` 或 `drissionpage` |
 | `proxy` | object | `null` | 代理服务器配置，格式：`{"server": "...", "username": "...", "password": "..."}` |
+| `proxy_pool_group` | string | `null` | 代理池分组名称，设置后将自动从中选择可用代理 |
 | `cookies` | string/object/list | `null` | 注入 Cookie。支持字符串 (`name=val;`), JSON 对象 (`{name: val}`) 或 JSON 数组 (`[{name, value, ...}]`)。自动适配主域名。 |
+| `cookie_group` | string | `null` | Cookie 池分组名称，设置后将自动从池中分配账号并注入 Cookie |
 | `parser` | string | `null` | 解析服务类型：`gne` (通用新闻解析), `xpath` (自定义规则), `llm` (大模型解析) |
 | `parser_config` | object | `null` | 解析配置。<br>• **gne**: 可选 `{"mode": "detail"}` (详情模式，默认) 或 `{"mode": "list"}` (列表模式)。<br>• **llm**: 必选 `{"fields": ["title", "price"]}` 指定提取字段。 |
 
