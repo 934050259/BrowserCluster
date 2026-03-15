@@ -91,7 +91,8 @@
         </el-table-column>
         <el-table-column label="Cookies" min-width="100">
           <template #default="{ row }">
-            <el-tag v-if="row.cookies" type="success" size="small">已配置</el-tag>
+            <el-tag v-if="row.cookie_group" type="warning" size="small">池: {{ row.cookie_group }}</el-tag>
+            <el-tag v-else-if="row.cookies" type="success" size="small">手动配置</el-tag>
             <el-tag v-else type="info" size="small">未配置</el-tag>
           </template>
         </el-table-column>
@@ -146,8 +147,18 @@
                   </el-input>
                   <div class="input-tip">支持相同域名配置多条规则，系统将优先匹配高优先级配置</div>
                 </el-form-item>
-                
-                <el-form-item label="Cookies" prop="cookies">
+              </div>
+
+              <div class="section-group">
+                <div class="section-title">Cookie 配置</div>
+                <el-form-item label="Cookie 来源">
+                  <el-radio-group v-model="cookieSourceType">
+                    <el-radio label="manual">手动输入</el-radio>
+                    <el-radio label="pool">Cookie 池</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+
+                <el-form-item label="Cookies" prop="cookies" v-if="cookieSourceType === 'manual'">
                   <el-input 
                     v-model="form.cookies" 
                     type="textarea" 
@@ -155,6 +166,25 @@
                     placeholder="请输入网站 Cookies (JSON 格式或 key1=value1; key2=value2)" 
                   />
                   <div class="input-tip">配置后任务执行时将自动携带该 Cookies</div>
+                </el-form-item>
+
+                <el-form-item label="Cookie 池分组" v-if="cookieSourceType === 'pool'">
+                  <el-select 
+                    v-model="form.cookie_group" 
+                    placeholder="选择 Cookie 分组" 
+                    clearable 
+                    filterable
+                    allow-create
+                    style="width: 100%"
+                  >
+                    <el-option 
+                      v-for="group in cookieGroups" 
+                      :key="group" 
+                      :label="group" 
+                      :value="group" 
+                    />
+                  </el-select>
+                  <div class="input-tip">选择 Cookie 池分组，抓取时将自动从该组中选择最优 Cookie。</div>
                 </el-form-item>
               </div>
 
@@ -638,18 +668,28 @@ import { ref, onMounted, reactive, watch, nextTick, onActivated } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete, MagicStick, Connection, Search, Timer, Monitor, Setting, Warning, InfoFilled, Collection, FolderOpened } from '@element-plus/icons-vue'
-import { getRules, createRule, updateRule, deleteRule, getProxyStats, getConfigs } from '@/api'
+import { getRules, createRule, updateRule, deleteRule, getProxyStats, getConfigs, getCookieStats } from '@/api'
 
 const rules = ref([])
 const loading = ref(false)
 const defaultUA = ref('')
+const cookieGroups = ref([])
+const cookieSourceType = ref('manual')
 
 const loadConfigs = async () => {
   try {
-    const configs = await getConfigs()
+    const [configs, cookieStats] = await Promise.all([
+      getConfigs(),
+      getCookieStats()
+    ])
+    
     const uaConfig = configs.find(c => c.key === 'user_agent')
     if (uaConfig) {
       defaultUA.value = uaConfig.value
+    }
+
+    if (cookieStats && cookieStats.groups) {
+      cookieGroups.value = cookieStats.groups
     }
   } catch (error) {
     console.error('Failed to load system configs:', error)
@@ -808,12 +848,14 @@ const handleAdd = () => {
     
     cache_config: { enabled: false, ttl: 3600 },
     cookies: '',
+    cookie_group: null,
     description: '',
     is_active: true,
     priority: 5,
     retry_enabled: false,
     max_retries: 0
   })
+  cookieSourceType.value = 'manual'
   selectedLlmFields.value = ['title', 'content']
   form.parser_config = { fields: ['title', 'content'] }
   xpathRules.value = [{ field: '', xpath: '' }]
@@ -839,7 +881,15 @@ const handleEdit = (row) => {
   if (rowData.oss_path === undefined) rowData.oss_path = ''
   if (rowData.retry_enabled === undefined) rowData.retry_enabled = true
   if (rowData.max_retries === undefined) rowData.max_retries = 3
+  if (rowData.cookie_group === undefined) rowData.cookie_group = null
   
+  // 确定 cookie 来源类型
+  if (rowData.cookie_group) {
+    cookieSourceType.value = 'pool'
+  } else {
+    cookieSourceType.value = 'manual'
+  }
+
   Object.assign(form, rowData)
   
   if (!form.cache_config) {
@@ -927,6 +977,15 @@ const submitForm = async () => {
       try {
         // 处理代理逻辑：如果使用了代理池，则清空手动代理配置
         const submitData = JSON.parse(JSON.stringify(form))
+        
+        // 处理 Cookie 逻辑：互斥
+        if (cookieSourceType.value === 'pool') {
+          submitData.cookies = ''
+          if (!submitData.cookie_group) submitData.cookie_group = null
+        } else {
+          submitData.cookie_group = null
+        }
+
         if (submitData.proxy_pool_group) {
           submitData.proxy = null
         } else {

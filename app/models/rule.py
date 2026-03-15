@@ -28,6 +28,7 @@ class ParsingRule(BaseModel):
     intercept_continue: Optional[bool] = True
     proxy: Optional[Dict[str, Any]] = Field(default_factory=lambda: {"server": "", "username": "", "password": ""})
     proxy_pool_group: Optional[str] = None  # 代理池分组
+    cookie_group: Optional[str] = None  # Cookie 池分组
     
     # 存储配置
     storage_type: StorageType = StorageType.MONGO
@@ -65,6 +66,7 @@ class ParsingRuleCreate(BaseModel):
     intercept_continue: Optional[bool] = True
     proxy: Optional[Dict[str, Any]] = Field(default_factory=lambda: {"server": "", "username": "", "password": ""})
     proxy_pool_group: Optional[str] = None
+    cookie_group: Optional[str] = None
     
     # 存储配置
     storage_type: Optional[StorageType] = StorageType.MONGO
@@ -100,6 +102,7 @@ class ParsingRuleUpdate(BaseModel):
     intercept_continue: Optional[bool] = None
     proxy: Optional[Dict[str, Any]] = None
     proxy_pool_group: Optional[str] = None
+    cookie_group: Optional[str] = None
     
     # 存储配置
     storage_type: Optional[StorageType] = None

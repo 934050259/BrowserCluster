@@ -332,7 +332,14 @@
                   </div>
                 </div>
                 
-                <el-form-item label="Cookies">
+                <el-form-item label="Cookie 配置">
+                  <el-radio-group v-model="cookieSourceType" size="small" :disabled="!!selectedRuleId">
+                    <el-radio-button label="manual">手动输入</el-radio-button>
+                    <el-radio-button label="pool">账号池</el-radio-button>
+                  </el-radio-group>
+                </el-form-item>
+
+                <el-form-item label="Cookies" v-if="cookieSourceType === 'manual'">
                     <div class="cookies-input-wrapper">
                       <el-input
                         v-model="scrapeForm.params.cookies"
@@ -346,6 +353,26 @@
                         <span>已自动加载该域名的默认 Cookies 配置</span>
                       </div>
                     </div>
+                </el-form-item>
+
+                <el-form-item label="Cookie 池分组" v-if="cookieSourceType === 'pool'">
+                  <el-select 
+                    v-model="scrapeForm.params.cookie_group" 
+                    placeholder="选择 Cookie 分组" 
+                    clearable 
+                    filterable
+                    allow-create
+                    style="width: 100%"
+                    :disabled="!!selectedRuleId"
+                  >
+                    <el-option 
+                      v-for="group in cookieGroups" 
+                      :key="group" 
+                      :label="group" 
+                      :value="group" 
+                    />
+                  </el-select>
+                  <div class="input-tip">选择账号池分组后，抓取时将自动分配最优账号。</div>
                 </el-form-item>
               </div>
               
@@ -1219,7 +1246,7 @@ import { ref, onMounted, computed, watch, onActivated } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Picture, WarningFilled, DeleteFilled, Delete, Setting, Connection, Monitor, Timer, Search, CopyDocument, View, VideoPlay, Link, Lock, Promotion, QuestionFilled, Cpu, Right, Document, UploadFilled, MagicStick, Warning, ArrowDown, RefreshRight } from '@element-plus/icons-vue'
-import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch, scrapeBatch, getRulesByDomain, getProxyStats, getConfigs } from '../api'
+import { getTasks, deleteTask as deleteTaskApi, getTask, scrapeAsync, retryTask, deleteTasksBatch, scrapeBatch, getRulesByDomain, getProxyStats, getConfigs, getCookieStats } from '../api'
 import dayjs from 'dayjs'
 
 const loading = ref(false)
@@ -1231,14 +1258,24 @@ const pageSize = ref(10)
 const total = ref(0)
 const activeTab = ref('info')
 const proxyGroups = ref([])
+const cookieGroups = ref([])
 const defaultUA = ref('')
+const cookieSourceType = ref('manual')
 
 const loadConfigs = async () => {
   try {
-    const configs = await getConfigs()
+    const [configs, cookieStats] = await Promise.all([
+      getConfigs(),
+      getCookieStats()
+    ])
+    
     const uaConfig = configs.find(c => c.key === 'user_agent')
     if (uaConfig) {
       defaultUA.value = uaConfig.value
+    }
+
+    if (cookieStats && cookieStats.groups) {
+      cookieGroups.value = cookieStats.groups
     }
   } catch (error) {
     console.error('Failed to load system configs:', error)
@@ -1359,7 +1396,7 @@ const applyMatchedRule = (rule, silent = false) => {
   const syncFields = [
     "engine", "wait_for", "wait_time", "timeout", "viewport", "stealth", 
     "save_html", "return_cookies", "screenshot", "is_fullscreen", "block_images",
-    "intercept_apis", "intercept_continue", "proxy", "cookies",
+    "intercept_apis", "intercept_continue", "proxy", "cookies", "cookie_group",
     "storage_type", "mongo_collection", "oss_path"
   ]
   
@@ -1372,6 +1409,13 @@ const applyMatchedRule = (rule, silent = false) => {
       }
     }
   })
+
+  // 更新 cookie 来源类型
+  if (scrapeForm.value.params.cookie_group) {
+    cookieSourceType.value = 'pool'
+  } else {
+    cookieSourceType.value = 'manual'
+  }
 
   if (!silent) {
     ElMessage.success(`已应用 ${rule.domain} 的解析配置`)
@@ -1768,6 +1812,19 @@ const fillFormFromTask = (row) => {
     const rules = scrapeForm.value.params.parser_config.rules || {}
     xpathRules.value = Object.entries(rules).map(([field, path]) => ({ field, path }))
   }
+
+  // 重置规则匹配状态，由 URL 监听器重新触发
+  lastCheckedDomain = ''
+  matchedRules.value = []
+  selectedRuleId.value = null
+  matchedCookies.value = false
+  
+  // 处理 Cookie 来源类型
+  if (scrapeForm.value.params.cookie_group) {
+    cookieSourceType.value = 'pool'
+  } else {
+    cookieSourceType.value = 'manual'
+  }
 }
 
 const handleEditAndRetry = (row) => {
@@ -1916,18 +1973,25 @@ const submitTask = async () => {
         data.params.intercept_apis = null
       }
 
-      if (data.params.cookies) {
-        const cookieVal = data.params.cookies.trim()
-        if ((cookieVal.startsWith('[') && cookieVal.endsWith(']')) || 
-            (cookieVal.startsWith('{') && cookieVal.endsWith('}'))) {
-          try {
-            data.params.cookies = JSON.parse(cookieVal)
-          } catch (e) {
-            console.warn('Cookies parse failed, using as string')
-          }
-        }
-      } else {
+      // 处理 Cookie 逻辑
+      if (cookieSourceType.value === 'pool') {
         data.params.cookies = null
+        if (!data.params.cookie_group) data.params.cookie_group = null
+      } else {
+        data.params.cookie_group = null
+        if (data.params.cookies) {
+          const cookieVal = data.params.cookies.trim()
+          if ((cookieVal.startsWith('[') && cookieVal.endsWith(']')) || 
+              (cookieVal.startsWith('{') && cookieVal.endsWith('}'))) {
+            try {
+              data.params.cookies = JSON.parse(cookieVal)
+            } catch (e) {
+              console.warn('Cookies parse failed, using as string')
+            }
+          }
+        } else {
+          data.params.cookies = null
+        }
       }
       
       if (!data.params.viewport || !data.params.viewport.width || !data.params.viewport.height) {
@@ -2037,6 +2101,9 @@ const resetForm = () => {
   ]
   lastCheckedDomain = ''
   matchedRules.value = []
+  selectedRuleId.value = null
+  matchedCookies.value = false
+  cookieSourceType.value = 'manual'
   activeConfigTab.value = 'basic'
 }
 

@@ -71,6 +71,8 @@ class ParserService:
             return await self._parse_with_llm(html, config)
         elif parser_type == "xpath":
             return self._parse_with_xpath(html, config, base_url)
+        elif parser_type == "none" or not parser_type:
+            return {}
         else:
             return {"error": f"Unsupported parser type: {parser_type}"}
 

@@ -22,6 +22,7 @@ from app.core.browser import browser_manager
 from app.core.drission_browser import drission_manager
 from app.core.config import settings
 from app.services.proxy_service import proxy_service
+from app.services.cookie_service import cookie_service
 
 logger = logging.getLogger(__name__)
 
@@ -842,6 +843,28 @@ class Scraper:
 
             # 设置 Cookies
             cookies = params.get("cookies")
+            cookie_group = params.get("cookie_group")
+            pool_cookie_obj = None
+
+            # 如果配置了 Cookie 池，优先从池中获取
+            if not cookies and cookie_group:
+                # 尝试从 url 中提取 domain
+                parsed_url = urlparse(url)
+                # 简单提取 domain: example.com
+                domain_parts = parsed_url.netloc.split(':')[0].split('.')
+                if len(domain_parts) >= 2:
+                    target_domain = f"{domain_parts[-2]}.{domain_parts[-1]}"
+                else:
+                    target_domain = parsed_url.netloc.split(':')[0]
+                
+                # 获取最佳 Cookie
+                pool_cookie_obj = await cookie_service.get_best_cookie(target_domain, group=cookie_group)
+                if pool_cookie_obj:
+                    cookies = pool_cookie_obj.value
+                    logger.info(f"Using cookie from pool group '{cookie_group}' for {target_domain}: {pool_cookie_obj.id}")
+                else:
+                    logger.warning(f"No available cookie in pool group '{cookie_group}' for {target_domain}")
+
             if isinstance(cookies, str):
                 if (cookies.strip().startswith('{') or cookies.strip().startswith('[')):
                     try:
@@ -1109,6 +1132,27 @@ class Scraper:
                 "status": "failed",
                 "error": "DrissionPage 引擎目前不支持带账密认证的代理，请切换到 Playwright 引擎或使用无须认证的代理。"
             }
+            
+        # 预先处理 Cookie 池逻辑 (必须在异步环境中完成)
+        cookie_group = params.get("cookie_group")
+        cookies = params.get("cookies")
+        
+        if not cookies and cookie_group:
+            parsed_url = urlparse(url)
+            domain_parts = parsed_url.netloc.split(':')[0].split('.')
+            if len(domain_parts) >= 2:
+                target_domain = f"{domain_parts[-2]}.{domain_parts[-1]}"
+            else:
+                target_domain = parsed_url.netloc.split(':')[0]
+            
+            # 获取最佳 Cookie (await 只能在 async 函数中使用)
+            pool_cookie_obj = await cookie_service.get_best_cookie(target_domain, group=cookie_group)
+            if pool_cookie_obj:
+                # 将获取到的 Cookie 值更新到 params 中，传递给同步函数
+                params["cookies"] = pool_cookie_obj.value
+                logger.info(f"Using cookie from pool group '{cookie_group}' for {target_domain}: {pool_cookie_obj.id}")
+            else:
+                logger.warning(f"No available cookie in pool group '{cookie_group}' for {target_domain}")
         
         result = await asyncio.to_thread(self._sync_scrape_with_drission, url, params, node_id)
         

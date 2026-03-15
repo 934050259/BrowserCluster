@@ -84,6 +84,15 @@ class Settings(BaseSettings):
     proxy_check_timeout: float = Field(default=10.0, description="单个代理检测超时时间 (秒)")
     proxy_fail_threshold: int = Field(default=3, description="代理连续失效多少次后标记为不可用")
 
+    # Cookie 池配置
+    cookie_enable_check: bool = Field(default=True, description="是否启用 Cookie 可用性自动检测")
+    cookie_redis_db: int = Field(default=7, description="Cookie 池使用的 Redis 数据库索引")
+    cookie_redis_key_prefix: str = Field(default="cookie_pool", description="Cookie 池 Redis Key 前缀")
+    cookie_check_interval: int = Field(default=300, description="Cookie 检测周期 (秒)")
+    cookie_check_timeout: float = Field(default=15.0, description="单个 Cookie 检测超时时间 (秒)")
+    cookie_fail_threshold: int = Field(default=3, description="Cookie 连续失效多少次后标记为不可用")
+    cookie_default_rate_limit: int = Field(default=60, description="默认 Cookie 调用频率限制 (次/分钟)")
+
     # 日志配置
     log_level: str = Field(default="INFO", description="系统日志打印级别 (DEBUG, INFO, WARNING, ERROR)")
     log_file: str = Field(default="logs/app.log", description="系统日志文件保存路径")

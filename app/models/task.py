@@ -31,6 +31,7 @@ class ScrapeParams(BaseModel):
     proxy: Optional[Dict[str, Any]] = None  # 代理配置 {server, username, password}
     proxy_pool_group: Optional[str] = None  # 代理池分组 (如果设置，将自动从该分组中选择代理)
     cookies: Optional[Union[str, List[Dict[str, Any]], Dict[str, str]]] = None  # Cookies, 支持 str, list [dict] 或 dict {name: value}
+    cookie_group: Optional[str] = None  # Cookie 池分组
     return_cookies: bool = False  # 是否返回 Cookies
     stealth: bool = True  # 是否启用反检测 (stealth)
     intercept_apis: Optional[List[str]] = None  # 要拦截的接口 URL 模式列表

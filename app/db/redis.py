@@ -14,6 +14,7 @@ class RedisClient:
     _cache_client = None  # 缓存客户端
     _queue_client = None  # 队列客户端
     _proxy_client = None  # 代理池客户端
+    _cookie_client = None  # Cookie 池客户端
 
     def __new__(cls):
         """实现单例模式"""
@@ -112,6 +113,36 @@ class RedisClient:
         self._current_proxy_db = settings.proxy_redis_db
         return self._proxy_client
 
+    def connect_cookie(self):
+        """
+        连接到 Cookie 池 Redis 实例
+        
+        Returns:
+            Redis: Redis 客户端实例
+        """
+        # 基于 redis_url，但修改 db
+        url = urlparse(settings.redis_url)
+        # 修改路径为新的 db
+        new_path = f"/{settings.cookie_redis_db}"
+        cookie_url = urlunparse((url.scheme, url.netloc, new_path, url.params, url.query, url.fragment))
+        
+        # 如果已经存在连接，先关闭
+        if self._cookie_client:
+            try:
+                self._cookie_client.close()
+            except:
+                pass
+                
+        self._cookie_client = redis.from_url(
+            cookie_url,
+            decode_responses=True,
+            health_check_interval=30,
+            retry_on_timeout=True
+        )
+        # 记录当前连接的 DB 索引，用于后续检查是否需要重新连接
+        self._current_cookie_db = settings.cookie_redis_db
+        return self._cookie_client
+
     @property
     def cache(self):
         """
@@ -148,6 +179,18 @@ class RedisClient:
             self.connect_proxy()
         return self._proxy_client
 
+    @property
+    def cookie(self):
+        """
+        获取 Cookie 池客户端，如果未连接或配置已更改则自动连接
+
+        Returns:
+            Redis: Cookie 池客户端
+        """
+        if self._cookie_client is None or getattr(self, '_current_cookie_db', None) != settings.cookie_redis_db:
+            self.connect_cookie()
+        return self._cookie_client
+
     def close_cache(self):
         """关闭缓存连接"""
         if self._cache_client:
@@ -166,11 +209,18 @@ class RedisClient:
             self._proxy_client.close()
             self._proxy_client = None
 
+    def close_cookie(self):
+        """关闭 Cookie 池连接"""
+        if self._cookie_client:
+            self._cookie_client.close()
+            self._cookie_client = None
+
     def close_all(self):
         """关闭所有 Redis 连接"""
         self.close_cache()
         self.close_queue()
         self.close_proxy()
+        self.close_cookie()
 
 
 # 全局 Redis 客户端实例

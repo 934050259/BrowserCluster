@@ -334,7 +334,14 @@
                 <el-input v-model="form.description" type="textarea" :rows="2" placeholder="请输入任务描述" />
               </el-form-item>
               
-              <el-form-item label="Cookies" v-if="form.params">
+              <el-form-item label="Cookie 配置">
+                <el-radio-group v-model="cookieSourceType" size="small" :disabled="!!selectedRuleId">
+                  <el-radio-button label="manual">手动输入</el-radio-button>
+                  <el-radio-button label="pool">账号池</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+
+              <el-form-item label="Cookies" v-if="cookieSourceType === 'manual' && form.params">
                 <div class="cookies-input-wrapper">
                   <el-input
                     v-model="form.params.cookies"
@@ -348,6 +355,26 @@
                     <span>已自动加载该域名的默认 Cookies 配置</span>
                   </div>
                 </div>
+              </el-form-item>
+
+              <el-form-item label="Cookie 池分组" v-if="cookieSourceType === 'pool' && form.params">
+                <el-select 
+                  v-model="form.params.cookie_group" 
+                  placeholder="选择 Cookie 分组" 
+                  clearable 
+                  filterable
+                  allow-create
+                  style="width: 100%"
+                  :disabled="!!selectedRuleId"
+                >
+                  <el-option 
+                    v-for="group in cookieGroups" 
+                    :key="group" 
+                    :label="group" 
+                    :value="group" 
+                  />
+                </el-select>
+                <div class="input-tip">选择账号池分组后，抓取时将自动分配最优账号。</div>
               </el-form-item>
             </div>
           </el-tab-pane>
@@ -844,7 +871,7 @@ import { ref, onMounted, computed, watch, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search, Edit, Delete, CaretRight, Link, InfoFilled, Connection, MagicStick, Monitor, Setting, Timer, Warning, QuestionFilled, ArrowDown, CircleCheckFilled, List, View, Document, Promotion } from '@element-plus/icons-vue'
-import { getSchedules, createSchedule, updateSchedule, deleteSchedule, toggleSchedule, runScheduleNow, getRulesByDomain, getTasks, getTask, getProxyStats, getConfigs } from '../api'
+import { getSchedules, createSchedule, updateSchedule, deleteSchedule, toggleSchedule, runScheduleNow, getRulesByDomain, getTasks, getTask, getProxyStats, getConfigs, getCookieStats } from '../api'
 import dayjs from 'dayjs'
 
 const loading = ref(false)
@@ -855,14 +882,24 @@ const currentPage = ref(1)
 const pageSize = ref(10)
 const router = useRouter()
 const proxyGroups = ref([])
+const cookieGroups = ref([])
 const defaultUA = ref('')
+const cookieSourceType = ref('manual')
 
 const loadConfigs = async () => {
   try {
-    const configs = await getConfigs()
+    const [configs, cookieStats] = await Promise.all([
+      getConfigs(),
+      getCookieStats()
+    ])
+    
     const uaConfig = configs.find(c => c.key === 'user_agent')
     if (uaConfig) {
       defaultUA.value = uaConfig.value
+    }
+
+    if (cookieStats && cookieStats.groups) {
+      cookieGroups.value = cookieStats.groups
     }
   } catch (error) {
     console.error('Failed to load system configs:', error)
@@ -933,6 +970,7 @@ const form = ref({
       password: ''
     },
     cookies: '',
+    cookie_group: null,
     stealth: true,
     storage_type: 'mongo',
     mongo_collection: '',
@@ -1031,7 +1069,7 @@ const applyMatchedRule = (rule, silent = false) => {
   const syncFields = [
     "engine", "wait_for", "wait_time", "timeout", "viewport", "stealth", 
     "save_html", "screenshot", "is_fullscreen", "block_images",
-    "intercept_apis", "intercept_continue", "proxy", "cookies",
+    "intercept_apis", "intercept_continue", "proxy", "cookies", "cookie_group",
     "storage_type", "mongo_collection", "oss_path"
   ]
   
@@ -1044,6 +1082,13 @@ const applyMatchedRule = (rule, silent = false) => {
       }
     }
   })
+
+  // 更新 cookie 来源类型
+  if (form.value.params.cookie_group) {
+    cookieSourceType.value = 'pool'
+  } else {
+    cookieSourceType.value = 'manual'
+  }
 
   if (!silent) {
     ElMessage.success(`已应用 ${rule.domain} 的解析配置`)
@@ -1274,7 +1319,10 @@ const openCreateDialog = () => {
       ttl: 3600
     }
   }
+  cookieSourceType.value = 'manual'
   matchedRules.value = []
+  selectedRuleId.value = null
+  matchedCookies.value = false
   lastCheckedDomain = ''
   selectedLlmFields.value = ['title', 'content']
   xpathRules.value = [
@@ -1433,6 +1481,19 @@ const handleEdit = (row) => {
     form.value.params.cookies = JSON.stringify(form.value.params.cookies, null, 2)
   }
 
+  // 处理 cookie 来源类型
+  if (form.value.params.cookie_group) {
+    cookieSourceType.value = 'pool'
+  } else {
+    cookieSourceType.value = 'manual'
+  }
+
+  // 重置规则匹配状态
+  matchedRules.value = []
+  selectedRuleId.value = null
+  matchedCookies.value = false
+  lastCheckedDomain = ''
+
   activeTab.value = 'basic'
   showDialog.value = true
 }
@@ -1498,18 +1559,24 @@ const handleSubmit = async () => {
     }
 
     // 处理 Cookies
-    if (submitData.params.cookies) {
-      const cookieVal = submitData.params.cookies.trim()
-      if ((cookieVal.startsWith('[') && cookieVal.endsWith(']')) || 
-          (cookieVal.startsWith('{') && cookieVal.endsWith('}'))) {
-        try {
-          submitData.params.cookies = JSON.parse(cookieVal)
-        } catch (e) {
-          console.warn('Cookies parse failed, using as string')
-        }
-      }
-    } else {
+    if (cookieSourceType.value === 'pool') {
       submitData.params.cookies = null
+      if (!submitData.params.cookie_group) submitData.params.cookie_group = null
+    } else {
+      submitData.params.cookie_group = null
+      if (submitData.params.cookies) {
+        const cookieVal = submitData.params.cookies.trim()
+        if ((cookieVal.startsWith('[') && cookieVal.endsWith(']')) || 
+            (cookieVal.startsWith('{') && cookieVal.endsWith('}'))) {
+          try {
+            submitData.params.cookies = JSON.parse(cookieVal)
+          } catch (e) {
+            console.warn('Cookies parse failed, using as string')
+          }
+        }
+      } else {
+        submitData.params.cookies = null
+      }
     }
 
     if (isEdit.value) {

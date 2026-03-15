@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(ROOT_DIR)
 
-from app.api import scrape, tasks, stats, admin, nodes, auth, users, rules, schedules, proxy, scrapers
+from app.api import scrape, tasks, stats, admin, nodes, auth, users, rules, schedules, proxy, scrapers, cookies
 from app.db.mongo import mongo
 from app.db.redis import redis_client
 from app.core.config import settings
@@ -109,6 +109,7 @@ app.include_router(rules.router)
 app.include_router(schedules.router)
 app.include_router(proxy.router)
 app.include_router(scrapers.router)
+app.include_router(cookies.router)
 
 
 async def browser_idle_check():

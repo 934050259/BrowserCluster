@@ -8,6 +8,7 @@ import Configs from '../views/Configs.vue'
 import Rules from '../views/Rules.vue'
 import Scrapers from '../views/Scrapers.vue'
 import Proxies from '../views/Proxies.vue'
+import Cookies from '../views/Cookies.vue'
 import Nodes from '../views/Nodes.vue'
 import Login from '../views/Login.vue'
 import Users from '../views/Users.vue'
@@ -24,6 +25,7 @@ const routes = [
   { path: '/rules', component: Rules, meta: { adminOnly: true } },
   { path: '/scrapers', component: Scrapers, meta: { adminOnly: true } },
   { path: '/proxies', component: Proxies, meta: { adminOnly: true } },
+  { path: '/cookies', component: Cookies, meta: { adminOnly: true } },
   { path: '/nodes', component: Nodes, meta: { adminOnly: true } },
   { path: '/users', component: Users, meta: { adminOnly: true } }
 ]

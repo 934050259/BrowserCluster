@@ -276,6 +276,67 @@ export const deleteConfig = async (key) => {
   return response.data
 }
 
+// Cookie API
+export const getCookies = async (params) => {
+  const response = await api.get('/cookies/', { params })
+  return response.data
+}
+
+export const getCookieStats = async () => {
+  const response = await api.get('/cookies/stats')
+  return response.data
+}
+
+export const createCookie = async (data) => {
+  const response = await api.post('/cookies/', data)
+  return response.data
+}
+
+export const updateCookie = async (cookieId, data) => {
+  const response = await api.put(`/cookies/${cookieId}`, data)
+  return response.data
+}
+
+export const deleteCookie = async (cookieId) => {
+  const response = await api.delete(`/cookies/${cookieId}`)
+  return response.data
+}
+
+export const batchDeleteCookies = async (cookieIds) => {
+  const response = await api.post('/cookies/batch-delete', cookieIds)
+  return response.data
+}
+
+export const importCookies = async (data) => {
+  const response = await api.post('/cookies/import', data)
+  return response.data
+}
+
+export const checkAllCookies = async () => {
+  const response = await api.post('/cookies/check-all')
+  return response.data
+}
+
+export const checkCookie = async (cookieId) => {
+  const response = await api.post(`/cookies/${cookieId}/check`)
+  return response.data
+}
+
+export const exportCookies = async () => {
+  const response = await api.get('/cookies/export-all')
+  return response.data
+}
+
+export const getCookieConfig = async () => {
+  const response = await api.get('/cookies/config')
+  return response.data
+}
+
+export const updateCookieConfig = async (data) => {
+  const response = await api.put('/cookies/config', data)
+  return response.data
+}
+
 // Node management
 export const getNodes = async () => {
   const response = await api.get('/nodes/')

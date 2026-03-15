@@ -218,7 +218,14 @@
                   <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选：对该采集任务的补充说明" clearable />
                 </el-form-item>
 
-                <el-form-item label="Cookies">
+                <el-form-item label="Cookie 配置">
+                  <el-radio-group v-model="cookieSourceType" size="small">
+                    <el-radio-button label="manual">手动输入</el-radio-button>
+                    <el-radio-button label="pool">账号池</el-radio-button>
+                  </el-radio-group>
+                </el-form-item>
+
+                <el-form-item label="Cookies" v-if="cookieSourceType === 'manual'">
                   <div class="cookies-input-wrapper">
                     <el-input
                       v-model="form.params.cookies"
@@ -228,6 +235,25 @@
                       clearable
                     />
                   </div>
+                </el-form-item>
+
+                <el-form-item label="Cookie 池分组" v-if="cookieSourceType === 'pool'">
+                  <el-select 
+                    v-model="form.params.cookie_group" 
+                    placeholder="选择 Cookie 分组" 
+                    clearable 
+                    filterable
+                    allow-create
+                    style="width: 100%"
+                  >
+                    <el-option 
+                      v-for="group in cookieGroups" 
+                      :key="group" 
+                      :label="group" 
+                      :value="group" 
+                    />
+                  </el-select>
+                  <div class="input-tip">选择账号池分组后，抓取时将自动分配最优账号。</div>
                 </el-form-item>
 
                 <el-row :gutter="20">
@@ -1125,7 +1151,7 @@ import { ref, onMounted, reactive, computed, watch, onUnmounted, onActivated } f
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Plus, VideoPlay, Position, Link, Setting, Search, Delete, Refresh, InfoFilled, Operation, Monitor, Calendar, QuestionFilled, CopyDocument, Connection, MagicStick, Loading, Warning } from '@element-plus/icons-vue'
-import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs, getScraperData, getScraperExecution, clearScraperExecutions } from '@/api'
+import { getScrapers, createScraper, updateScraper, deleteScraper, testScraper, getRules, runScraper, getProxyStats, aiGenerateRules, getConfigs, getScraperData, getScraperExecution, clearScraperExecutions, getCookieStats } from '@/api'
 
 const scrapers = ref([])
 const rules = ref([])
@@ -1133,6 +1159,8 @@ const router = useRouter()
 const loading = ref(false)
 const runningScrapers = ref(new Set(JSON.parse(localStorage.getItem('runningScrapers') || '[]')))
 let pollingTimer = null
+const cookieGroups = ref([])
+const cookieSourceType = ref('manual')
 
 const startPolling = () => {
     if (pollingTimer) return
@@ -1165,10 +1193,18 @@ const defaultUA = ref('')
 
 const loadConfigs = async () => {
     try {
-        const configs = await getConfigs()
+        const [configs, cookieStats] = await Promise.all([
+            getConfigs(),
+            getCookieStats()
+        ])
+        
         const uaConfig = configs.find(c => c.key === 'user_agent')
         if (uaConfig) {
             defaultUA.value = uaConfig.value
+        }
+
+        if (cookieStats && cookieStats.groups) {
+            cookieGroups.value = cookieStats.groups
         }
     } catch (error) {
         console.error('Failed to load system configs:', error)
@@ -1879,6 +1915,7 @@ const form = reactive({
         proxy: { server: '', username: '', password: '' },
         proxy_pool_group: '',
         cookies: '',
+        cookie_group: null,
         intercept_apis: [],
         intercept_continue: false,
         storage_type: 'mongo',
@@ -1994,6 +2031,7 @@ const handleAdd = async () => {
     } catch (e) {
         console.error('Failed to stringify cookies:', e)
     }
+    cookieSourceType.value = 'manual'
 
     dialogVisible.value = true
 }
@@ -2026,6 +2064,13 @@ const handleEdit = async (row) => {
         }
     } catch (e) {
         console.error('Failed to stringify cookies for edit:', e)
+    }
+
+    // 处理 cookie 来源类型
+    if (form.params.cookie_group) {
+        cookieSourceType.value = 'pool'
+    } else {
+        cookieSourceType.value = 'manual'
     }
     
     // 补全可能缺失的字段
@@ -2133,16 +2178,22 @@ const submitForm = async () => {
                 const data = JSON.parse(JSON.stringify(form))
                 
                 // 处理 params.cookies
-                // 如果输入的是 JSON 字符串，尝试解析回对象
-                if (data.params && data.params.cookies && typeof data.params.cookies === 'string') {
-                    const cookieStr = data.params.cookies.trim()
-                    if ((cookieStr.startsWith('{') && cookieStr.endsWith('}')) || 
-                        (cookieStr.startsWith('[') && cookieStr.endsWith(']'))) {
-                        try {
-                            data.params.cookies = JSON.parse(cookieStr)
-                        } catch (e) {
-                            // 解析失败，保持原字符串（可能是 key=value 格式）
-                            console.warn('Failed to parse cookies as JSON, keeping as string:', e)
+                if (cookieSourceType.value === 'pool') {
+                    data.params.cookies = null
+                    if (!data.params.cookie_group) data.params.cookie_group = null
+                } else {
+                    data.params.cookie_group = null
+                    // 如果输入的是 JSON 字符串，尝试解析回对象
+                    if (data.params && data.params.cookies && typeof data.params.cookies === 'string') {
+                        const cookieStr = data.params.cookies.trim()
+                        if ((cookieStr.startsWith('{') && cookieStr.endsWith('}')) || 
+                            (cookieStr.startsWith('[') && cookieStr.endsWith(']'))) {
+                            try {
+                                data.params.cookies = JSON.parse(cookieStr)
+                            } catch (e) {
+                                // 解析失败，保持原字符串（可能是 key=value 格式）
+                                console.warn('Failed to parse cookies as JSON, keeping as string:', e)
+                            }
                         }
                     }
                 }

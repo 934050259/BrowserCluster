@@ -100,6 +100,7 @@ class Worker:
                 "engine", "wait_for", "timeout", "viewport", "stealth", 
                 "save_html", "screenshot", "is_fullscreen", "block_images",
                 "intercept_apis", "intercept_continue", "proxy", "proxy_pool_group",
+                "cookie_group",
                 "storage_type", "mongo_collection", "oss_path", "return_cookies", "user_agent"
             ]
             
@@ -120,10 +121,14 @@ class Worker:
                         params[field] = rule_val
                         applied_changes = True
             
-            # 3. Cookies (如果任务没有指定)
-            if not params.get("cookies") and matched_rule.get("cookies"):
-                params["cookies"] = matched_rule.get("cookies")
-                applied_changes = True
+            # 3. Cookies & Cookie 池 (如果任务没有指定)
+            if not params.get("cookies") and not params.get("cookie_group"):
+                if matched_rule.get("cookie_group"):
+                    params["cookie_group"] = matched_rule.get("cookie_group")
+                    applied_changes = True
+                elif matched_rule.get("cookies"):
+                    params["cookies"] = matched_rule.get("cookies")
+                    applied_changes = True
 
             # 如果应用了规则中的配置，同步回数据库以便前端显示正确的代理/参数信息
             if applied_changes:
@@ -172,7 +177,7 @@ class Worker:
                 res = await scraper.scrape(url, params, self.node_id)
                 
                 # 2. 如果抓取成功且配置了解析服务，执行解析
-                if res["status"] == "success" and params.get("parser"):
+                if res["status"] == "success" and params.get("parser") and params["parser"] != "none":
                     parser_type = params["parser"]
                     parser_config = params.get("parser_config", {})
                     html_content = res.get("html", "")
