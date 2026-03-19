@@ -23,6 +23,23 @@ class CookiePoolService:
         # 强制从数据库重新加载配置
         settings.load_from_db()
         self._config_callbacks = []
+        
+        # Lua 脚本：原子性检查并增加频率计数
+        # KEYS[1]: rate_key
+        # ARGV[1]: expire_time (秒)
+        # ARGV[2]: limit (最大次数)
+        # 返回: 1 成功获取, 0 超过限制
+        self._acquire_script = self.redis.register_script("""
+            local current = tonumber(redis.call('get', KEYS[1]) or "0")
+            if current >= tonumber(ARGV[2]) then
+                return 0
+            end
+            local new_val = redis.call('incr', KEYS[1])
+            if new_val == 1 then
+                redis.call('expire', KEYS[1], ARGV[1])
+            end
+            return 1
+        """)
 
     def register_config_callback(self, callback):
         """注册配置变更回调"""
@@ -174,16 +191,16 @@ class CookiePoolService:
             if not cookie or cookie.group != group or cookie.status != "active":
                 continue
                 
-            # 检查频率限制
-            if await self._check_rate_limit(cookie):
-                # 更新使用统计
-                await self._record_usage(cookie)
+            # 尝试原子性获取 Cookie (检查并增加计数)
+            if await self._try_acquire_cookie(cookie):
+                # 更新持久化统计信息 (非严格并发要求，仅用于 UI 展示)
+                await self._update_usage_stats(cookie)
                 return cookie
                 
         return None
 
-    async def _check_rate_limit(self, cookie: Cookie) -> bool:
-        """检查是否超过频率限制"""
+    async def _try_acquire_cookie(self, cookie: Cookie) -> bool:
+        """原子性尝试获取 Cookie 额度"""
         if cookie.rate_limit <= 0:
             return True
             
@@ -191,28 +208,25 @@ class CookiePoolService:
         current_minute = int(datetime.now().timestamp() // 60)
         rate_key = f"{self.base_key}:rate:{cookie.id}:{current_minute}"
         
-        count = self.redis.get(rate_key)
-        if count and int(count) >= cookie.rate_limit:
-            logger.warning(f"Cookie {cookie.id} rate limit exceeded ({count}/{cookie.rate_limit})")
+        # 调用 Lua 脚本进行原子操作
+        # KEYS[1]: rate_key, ARGV[1]: expire_time, ARGV[2]: limit
+        success = self._acquire_script(keys=[rate_key], args=[65, cookie.rate_limit])
+        
+        if not success:
+            logger.warning(f"Cookie {cookie.id} rate limit exceeded for minute {current_minute}")
             return False
             
         return True
 
-    async def _record_usage(self, cookie: Cookie):
-        """记录使用次数"""
-        current_minute = int(datetime.now().timestamp() // 60)
-        rate_key = f"{self.base_key}:rate:{cookie.id}:{current_minute}"
-        
-        # 增加计数并设置过期时间 (60秒后过期，也就是下一分钟)
-        pipe = self.redis.pipeline()
-        pipe.incr(rate_key)
-        pipe.expire(rate_key, 65) # 稍微多一点时间以防边界情况
-        pipe.execute()
-        
-        # 更新 Cookie 统计
-        cookie.total_count += 1
-        cookie.last_used_at = datetime.now()
-        self.redis.hset(self.details_key, cookie.id, cookie.to_redis_val())
+    async def _update_usage_stats(self, cookie: Cookie):
+        """更新持久化的使用统计 (UI 展示用)"""
+        try:
+            # 这里仅更新 Hash 中的统计信息，不影响频率限制逻辑
+            cookie.total_count += 1
+            cookie.last_used_at = datetime.now()
+            self.redis.hset(self.details_key, cookie.id, cookie.to_redis_val())
+        except Exception as e:
+            logger.error(f"Failed to update cookie usage stats: {e}")
 
     async def _add_to_pool(self, cookie_id: str, domain: str):
         """添加到可用池"""
