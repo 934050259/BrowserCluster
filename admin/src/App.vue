@@ -38,22 +38,24 @@
                 <template #title>首页概览</template>
               </el-menu-item>
               
-              <div class="menu-group-title" v-if="!isCollapse">任务调度</div>
+              <div class="menu-group-title" v-if="!isCollapse">采集任务</div>
               <el-menu-item index="tasks">
                 <el-icon><List /></el-icon>
                 <template #title>任务管理</template>
+              </el-menu-item>
+              <el-menu-item index="scrapers" v-if="isAdmin">
+                <el-icon><Compass /></el-icon>
+                <template #title>站点采集</template>
               </el-menu-item>
               <el-menu-item index="schedules">
                 <el-icon><Timer /></el-icon>
                 <template #title>定时任务</template>
               </el-menu-item>
+
+              <div class="menu-group-title" v-if="!isCollapse">资源与规则</div>
               <el-menu-item index="rules" v-if="isAdmin">
                 <el-icon><Connection /></el-icon>
                 <template #title>网站配置</template>
-              </el-menu-item>
-              <el-menu-item index="scrapers" v-if="isAdmin">
-                <el-icon><Compass /></el-icon>
-                <template #title>站点采集</template>
               </el-menu-item>
               <el-menu-item index="proxies" v-if="isAdmin">
                 <el-icon><Service /></el-icon>
