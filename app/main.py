@@ -31,6 +31,7 @@ from app.core.logger import setup_logging
 from app.services.node_manager import node_manager
 from app.services.scheduler_service import scheduler_service
 from app.services.proxy_service import proxy_service
+from app.services.cookie_service import cookie_service
 from app.core.scheduler import scraper_scheduler
 from app.core.drission_browser import drission_manager
 from app.core.browser import browser_manager
@@ -147,6 +148,9 @@ async def startup_event():
     
     # 注册代理配置变更回调，用于动态更新定时任务
     proxy_service.register_config_callback(scheduler_service.refresh_system_jobs)
+    
+    # 注册 Cookie 配置变更回调，用于动态更新定时任务
+    cookie_service.register_config_callback(scheduler_service.refresh_system_jobs)
     
     # 启动定时任务调度器
     scheduler_service.start()

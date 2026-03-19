@@ -16,6 +16,7 @@ from app.db.mongo import mongo
 from app.models.schedule import ScheduleModel, ScheduleStatus, ScheduleType
 from app.services.task_service import task_service
 from app.services.proxy_service import proxy_service
+from app.services.cookie_service import cookie_service
 from app.models.task import ScrapeRequest
 from app.core.config import settings
 
@@ -40,23 +41,40 @@ class SchedulerService:
             self._load_all_jobs()
 
     def _add_system_jobs(self):
-        """添加系统预设任务，如代理池检测"""
-        # 如果关闭了代理检测，则不添加或移除已有的任务
-        if not settings.proxy_enable_check:
+        """添加系统预设任务，如代理池检测、Cookie池检测"""
+        # 1. 代理检测任务
+        if settings.proxy_enable_check:
+            interval = settings.proxy_check_interval
+            self.scheduler.add_job(
+                proxy_service.check_all_proxies,
+                trigger=IntervalTrigger(seconds=interval),
+                id="system_proxy_check",
+                name="System Proxy Check",
+                replace_existing=True,
+                next_run_time=datetime.now() # 启动时立即执行一次
+            )
+            logger.info(f"Added system job: proxy check (every {interval}s, next run: now)")
+        else:
             if self.scheduler.get_job("system_proxy_check"):
                 self.scheduler.remove_job("system_proxy_check")
                 logger.info("Removed system job: proxy check (disabled in settings)")
-            return
 
-        interval = settings.proxy_check_interval
-        self.scheduler.add_job(
-            proxy_service.check_all_proxies,
-            trigger=IntervalTrigger(seconds=interval),
-            id="system_proxy_check",
-            name="System Proxy Check",
-            replace_existing=True
-        )
-        logger.info(f"Added/Updated system job: proxy check (every {interval}s)")
+        # 2. Cookie 检测任务
+        if settings.cookie_enable_check:
+            interval = settings.cookie_check_interval
+            self.scheduler.add_job(
+                cookie_service.check_all_cookies,
+                trigger=IntervalTrigger(seconds=interval),
+                id="system_cookie_check",
+                name="System Cookie Check",
+                replace_existing=True,
+                next_run_time=datetime.now() # 启动时立即执行一次
+            )
+            logger.info(f"Added system job: cookie check (every {interval}s, next run: now)")
+        else:
+            if self.scheduler.get_job("system_cookie_check"):
+                self.scheduler.remove_job("system_cookie_check")
+                logger.info("Removed system job: cookie check (disabled in settings)")
 
     def refresh_system_jobs(self):
         """刷新系统预设任务"""

@@ -287,11 +287,15 @@ class CookiePoolService:
         result = await self.list_cookies(limit=10000)
         cookies = result["items"]
         
+        logger.info(f"Starting scheduled cookie check for {len(cookies)} cookies")
+        
+        if not cookies:
+            return
+
         # 并发检测
         tasks = [self.check_cookie(c) for c in cookies]
-        if tasks:
-            await asyncio.gather(*tasks)
-            logger.info(f"Finished checking {len(tasks)} cookies")
+        await asyncio.gather(*tasks)
+        logger.info(f"Finished checking {len(tasks)} cookies")
 
     async def get_stats(self) -> CookieStats:
         """获取统计信息"""
