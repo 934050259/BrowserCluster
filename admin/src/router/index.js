@@ -12,22 +12,28 @@ import Cookies from '../views/Cookies.vue'
 import Nodes from '../views/Nodes.vue'
 import Login from '../views/Login.vue'
 import Users from '../views/Users.vue'
+import Workflows from '../views/Workflows.vue'
+import WorkflowEditor from '../views/WorkflowEditor.vue'
+import WorkflowResults from '../views/WorkflowResults.vue'
 import { useAuthStore } from '../stores/auth'
 
 const routes = [
-  { path: '/login', component: Login, meta: { public: true } },
-  { path: '/', component: Home },
-  { path: '/tasks', component: Tasks },
-  { path: '/task-records', component: TaskRecords, name: 'TaskRecords' },
-  { path: '/schedules', component: Schedules },
-  { path: '/stats', component: Stats },
-  { path: '/configs', component: Configs, meta: { adminOnly: true } },
-  { path: '/rules', component: Rules, meta: { adminOnly: true } },
-  { path: '/scrapers', component: Scrapers, meta: { adminOnly: true } },
-  { path: '/proxies', component: Proxies, meta: { adminOnly: true } },
-  { path: '/cookies', component: Cookies, meta: { adminOnly: true } },
-  { path: '/nodes', component: Nodes, meta: { adminOnly: true } },
-  { path: '/users', component: Users, meta: { adminOnly: true } }
+  { path: '/login', component: Login, meta: { public: true, title: '登录' } },
+  { path: '/', component: Home, meta: { title: '首页概览' } },
+  { path: '/tasks', component: Tasks, meta: { title: '任务管理' } },
+  { path: '/task-records', component: TaskRecords, name: 'TaskRecords', meta: { title: '采集记录' } },
+  { path: '/schedules', component: Schedules, meta: { title: '定时任务' } },
+  { path: '/stats', component: Stats, meta: { title: '数据统计' } },
+  { path: '/configs', component: Configs, meta: { adminOnly: true, title: '系统设置' } },
+  { path: '/rules', component: Rules, meta: { adminOnly: true, title: '网站配置' } },
+  { path: '/scrapers', component: Scrapers, meta: { adminOnly: true, title: '站点采集' } },
+  { path: '/proxies', component: Proxies, meta: { adminOnly: true, title: '代理管理' } },
+  { path: '/cookies', component: Cookies, meta: { adminOnly: true, title: 'Cookie 池' } },
+  { path: '/nodes', component: Nodes, meta: { adminOnly: true, title: '节点管理' } },
+  { path: '/users', component: Users, meta: { adminOnly: true, title: '用户管理' } },
+  { path: '/workflows', component: Workflows, meta: { adminOnly: true, title: '流程编排' } },
+  { path: '/workflows/edit/:id?', name: 'WorkflowEditor', component: WorkflowEditor, meta: { adminOnly: true, title: '流程编辑' } },
+  { path: '/workflows/results/:id', name: 'WorkflowResults', component: WorkflowResults, meta: { adminOnly: true, title: '执行数据' } }
 ]
 
 const router = createRouter({

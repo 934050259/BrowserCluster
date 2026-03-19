@@ -427,3 +427,59 @@ export const getScraperExecution = async (id) => {
   const response = await api.get(`/scrapers/executions/${id}`)
   return response.data
 }
+
+// Workflows API
+export const getWorkflows = async (params) => {
+  const response = await api.get('/workflows/', { params })
+  return response.data
+}
+
+export const getWorkflow = async (id) => {
+  const response = await api.get(`/workflows/${id}`)
+  return response.data
+}
+
+export const createWorkflow = async (data) => {
+  const response = await api.post('/workflows/', data)
+  return response.data
+}
+
+export const updateWorkflow = async (id, data) => {
+  const response = await api.put(`/workflows/${id}`, data)
+  return response.data
+}
+
+export const deleteWorkflow = async (id) => {
+  const response = await api.delete(`/workflows/${id}`)
+  return response.data
+}
+
+export const executeWorkflow = async (id, mode = 'prod') => {
+  const response = await api.post(`/workflows/${id}/execute`, null, { params: { mode } })
+  return response.data
+}
+
+export const getExecutionStatus = async (executionId) => {
+  const response = await api.get(`/workflows/executions/${executionId}/status`)
+  return response.data
+}
+
+export const getActiveExecutions = async () => {
+  const response = await api.get('/workflows/executions/active')
+  return response.data
+}
+
+export const getWorkflowExecutions = async (id, params) => {
+  const response = await api.get(`/workflows/${id}/executions`, { params })
+  return response.data
+}
+
+export const getWorkflowLogs = async (id, mode) => {
+  const response = await api.get(`/workflows/${id}/logs`, { params: { mode } })
+  return response.data
+}
+
+export const clearWorkflowTestData = async (id) => {
+  const response = await api.delete(`/workflows/${id}/test-data`)
+  return response.data
+}

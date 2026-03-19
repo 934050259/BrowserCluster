@@ -58,25 +58,26 @@ class BrowserManager:
             Playwright: Playwright 实例
         """
         if self._playwright is None:
-            # Windows 诊断与自动修复
+            # Windows 诊断
             if sys.platform == 'win32':
                 try:
                     loop = asyncio.get_running_loop()
                 except RuntimeError:
-                    # 如果没有正在运行的循环，尝试获取当前线程的循环
                     loop = asyncio.get_event_loop()
                 
                 loop_type = type(loop).__name__
                 logger.info(f"Starting Playwright. Current loop type: {loop_type}")
                 
                 if loop_type != 'ProactorEventLoop':
-                    logger.warning(f"Playwright requires ProactorEventLoop on Windows, but found {loop_type}. Attempting to fix...")
-                    try:
-                        # 强制设置当前线程的事件循环策略
-                        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-                        logger.info("Successfully set WindowsProactorEventLoopPolicy for current thread.")
-                    except Exception as e:
-                        logger.error(f"Failed to set WindowsProactorEventLoopPolicy: {e}")
+                    msg = (
+                        f"CRITICAL: Playwright requires ProactorEventLoop on Windows, but current loop is {loop_type}. "
+                        "Subprocess spawning will fail. Please ensure WindowsProactorEventLoopPolicy is set at the "
+                        "very beginning of the application entry point."
+                    )
+                    logger.error(msg)
+                    # 虽然不能在这里修复已经运行的 loop，但可以尝试抛出异常，让用户意识到配置错误
+                    if not settings.debug:  # 生产环境下抛出异常，防止僵尸进程
+                        raise RuntimeError(msg)
             
             self._playwright = await async_playwright().start()
         return self._playwright

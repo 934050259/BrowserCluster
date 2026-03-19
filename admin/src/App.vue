@@ -47,6 +47,10 @@
                 <el-icon><Compass /></el-icon>
                 <template #title>站点采集</template>
               </el-menu-item>
+              <el-menu-item index="workflows" v-if="isAdmin">
+                <el-icon><Operation /></el-icon>
+                <template #title>流程编排</template>
+              </el-menu-item>
               <el-menu-item index="schedules">
                 <el-icon><Timer /></el-icon>
                 <template #title>定时任务</template>
@@ -117,8 +121,10 @@
               <Fold v-else />
             </el-icon>
             <el-breadcrumb separator="/">
-              <el-breadcrumb-item>首页</el-breadcrumb-item>
-              <el-breadcrumb-item>{{ currentRouteName }}</el-breadcrumb-item>
+              <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
+              <el-breadcrumb-item v-for="(item, index) in breadcrumbs" :key="index" :to="item.path">
+                {{ item.title }}
+              </el-breadcrumb-item>
             </el-breadcrumb>
           </div>
           
@@ -138,6 +144,24 @@
             <el-divider direction="vertical" />
             
             <div class="stats-overview">
+              <el-tooltip content="系统状态" placement="bottom">
+                <div class="stats-card-mini">
+                  <div class="stat-item" :class="stats.nodes?.active > 0 ? 'success' : 'warning'">
+                    <el-icon><Monitor /></el-icon>
+                    <span class="label">Nodes</span>
+                    <span class="value">{{ stats.nodes?.active || 0 }}</span>
+                  </div>
+                  <div class="stat-divider"></div>
+                  <div class="stat-item" :class="getLoadStatusClass(stats.system_load)">
+                    <el-icon><Cpu v-if="stats.system_load > 50" /><Odometer v-else /></el-icon>
+                    <span class="label">Load</span>
+                    <span class="value">{{ stats.system_load || 0 }}%</span>
+                  </div>
+                </div>
+              </el-tooltip>
+              
+              <el-divider direction="vertical" />
+
               <el-tooltip content="今日任务统计" placement="bottom">
                 <div class="stats-card-mini">
                   <div class="stat-item success">
@@ -150,6 +174,12 @@
                     <el-icon><CircleClose /></el-icon>
                     <span class="label">Failed</span>
                     <span class="value">{{ stats.today.failed }}</span>
+                  </div>
+                  <div class="stat-divider"></div>
+                  <div class="stat-item info">
+                    <el-icon><Operation /></el-icon>
+                    <span class="label">Workflows</span>
+                    <span class="value">{{ stats.workflows?.total || 0 }}</span>
                   </div>
                   <div class="stat-progress-wrapper">
                     <el-progress 
@@ -201,8 +231,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { 
-  House, List, DataLine, Monitor, Setting, User, Service, Timer, Connection, Compass, Key,
-  Expand, Fold, CircleCheck, CircleClose, Refresh,
+  House, List, DataLine, Monitor, Setting, User, Service, Timer, Connection, Compass, Key, Operation,
+  Expand, Fold, CircleCheck, CircleClose, Refresh, Cpu, Odometer,
   QuestionFilled, FullScreen
 } from '@element-plus/icons-vue'
 import { useStatsStore } from './stores/stats'
@@ -228,26 +258,48 @@ const isLoginPage = computed(() => route.path === '/login')
 const activeMenu = computed(() => {
   const path = route.path
   if (path === '/') return ''
-  return path.substring(1)
+  const parts = path.split('/').filter(p => p)
+  return parts[0]
 })
 
-const currentRouteName = computed(() => {
-  const path = route.path
-  if (path === '/') return '概览'
-  const names = {
-    '/tasks': '任务管理',
-    '/task-records': '采集记录',
-    '/rules': '网站配置',
-    '/scrapers': '站点采集',
-    '/proxies': '代理管理',
-    '/cookies': 'Cookie 池',
-    '/schedules': '定时任务',
-    '/stats': '数据统计',
-    '/nodes': '节点管理',
-    '/configs': '系统设置',
-    '/users': '用户管理'
+const breadcrumbs = computed(() => {
+  if (route.path === '/') return []
+  
+  const crumbs = []
+  
+  // 基础映射
+  const baseMap = {
+    'tasks': '任务管理',
+    'task-records': '采集记录',
+    'schedules': '定时任务',
+    'stats': '数据统计',
+    'configs': '系统设置',
+    'rules': '网站配置',
+    'scrapers': '站点采集',
+    'proxies': '代理管理',
+    'cookies': 'Cookie 池',
+    'nodes': '节点管理',
+    'users': '用户管理',
+    'workflows': '流程编排'
   }
-  return names[path] || '未知'
+
+  const pathParts = route.path.split('/').filter(p => p)
+  
+  // 处理流程编排下的二级页面
+  if (pathParts[0] === 'workflows') {
+    crumbs.push({ title: '流程编排', path: '/workflows' })
+    if (pathParts[1] === 'edit') {
+      crumbs.push({ title: '流程编辑', path: route.fullPath })
+    } else if (pathParts[1] === 'results') {
+      crumbs.push({ title: '执行数据', path: route.fullPath })
+    }
+  } else {
+    // 处理其他页面
+    const title = route.meta?.title || baseMap[pathParts[0]] || '未知'
+    crumbs.push({ title, path: route.path })
+  }
+  
+  return crumbs
 })
 
 const refreshStats = () => {
