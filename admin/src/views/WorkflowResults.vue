@@ -113,14 +113,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Refresh, Delete } from '@element-plus/icons-vue'
 import { getWorkflowExecutions, getWorkflow, clearWorkflowTestData } from '@/api'
 
 const route = useRoute()
-const workflowId = route.params.id
+const workflowId = computed(() => route.params.id)
 const workflowName = ref('')
 const loading = ref(false)
 const executions = ref([])
@@ -138,9 +138,10 @@ const handleModeChange = () => {
 }
 
 const fetchData = async () => {
+  if (!workflowId.value) return
   loading.value = true
   try {
-    const res = await getWorkflowExecutions(workflowId, {
+    const res = await getWorkflowExecutions(workflowId.value, {
       mode: mode.value,
       skip: (currentPage.value - 1) * pageSize.value,
       limit: pageSize.value
@@ -156,8 +157,9 @@ const fetchData = async () => {
 }
 
 const fetchWorkflow = async () => {
+  if (!workflowId.value) return
   try {
-    const data = await getWorkflow(workflowId)
+    const data = await getWorkflow(workflowId.value)
     workflowName.value = data.name
   } catch (error) {}
 }
@@ -168,13 +170,14 @@ const viewDetail = (row) => {
 }
 
 const handleClearTestData = () => {
+  if (!workflowId.value) return
   ElMessageBox.confirm('确定要清除所有测试数据（包括日志、结果和执行记录）吗？', '提示', {
     type: 'warning',
     confirmButtonText: '确定',
     cancelButtonText: '取消'
   }).then(async () => {
     try {
-      await clearWorkflowTestData(workflowId)
+      await clearWorkflowTestData(workflowId.value)
       ElMessage.success('测试数据已清除')
       fetchData()
     } catch (error) {
@@ -196,9 +199,22 @@ const getImageUrl = (url) => {
   return `${apiBase}${url}`
 }
 
+// 监听路由参数变化，重置状态并重新加载数据
+watch(workflowId, (newId) => {
+  if (newId) {
+    executions.value = []
+    workflowName.value = ''
+    currentPage.value = 1
+    mode.value = 'prod'
+    selectedExecution.value = null
+    detailVisible.value = false
+    fetchWorkflow()
+    fetchData()
+  }
+}, { immediate: true })
+
 onMounted(() => {
-  fetchWorkflow()
-  fetchData()
+  // fetchData and fetchWorkflow are now handled by the watch with immediate: true
 })
 </script>
 

@@ -454,6 +454,11 @@ export const deleteWorkflow = async (id) => {
   return response.data
 }
 
+export const batchDeleteWorkflows = async (ids) => {
+  const response = await api.post('/workflows/batch-delete', ids)
+  return response.data
+}
+
 export const executeWorkflow = async (id, mode = 'prod') => {
   const response = await api.post(`/workflows/${id}/execute`, null, { params: { mode } })
   return response.data

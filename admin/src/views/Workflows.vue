@@ -24,6 +24,16 @@
             <el-icon><Plus /></el-icon>
             <span>新建流程</span>
           </el-button>
+          <el-button 
+            type="danger" 
+            plain 
+            :disabled="!selectedIds.length" 
+            @click="handleBatchDelete"
+            v-if="selectedIds.length"
+          >
+            <el-icon><Delete /></el-icon>
+            <span>批量删除 ({{ selectedIds.length }})</span>
+          </el-button>
         </div>
         <div class="toolbar-right">
           <el-button @click="fetchData">
@@ -32,7 +42,13 @@
         </div>
       </div>
 
-      <el-table :data="pagedWorkflows" v-loading="loading" style="width: 100%">
+      <el-table 
+        :data="pagedWorkflows" 
+        v-loading="loading" 
+        style="width: 100%"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" />
         <el-table-column prop="name" label="流程名称" min-width="200" />
         <el-table-column prop="description" label="描述" min-width="250" show-overflow-tooltip />
         <el-table-column label="节点数" width="100" align="center">
@@ -117,7 +133,7 @@ import { ref, onMounted, computed, reactive, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Refresh, VideoPlay, Document, Edit, Delete } from '@element-plus/icons-vue'
-import { getWorkflows, deleteWorkflow, updateWorkflow, executeWorkflow, getWorkflowLogs, getExecutionStatus, getActiveExecutions } from '@/api'
+import { getWorkflows, deleteWorkflow, updateWorkflow, executeWorkflow, getWorkflowLogs, getExecutionStatus, getActiveExecutions, batchDeleteWorkflows } from '@/api'
 
 const router = useRouter()
 const workflows = ref([])
@@ -125,9 +141,14 @@ const loading = ref(false)
 const searchQuery = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
+const selectedIds = ref([])
 const executingStates = reactive({})
 const executingProgress = reactive({})
 const activePolls = {}
+
+const handleSelectionChange = (selection) => {
+  selectedIds.value = selection.map(item => item._id)
+}
 
 const startPolling = (workflowId, executionId) => {
   if (activePolls[workflowId]) clearInterval(activePolls[workflowId])
@@ -259,6 +280,25 @@ const handleDelete = (row) => {
       ElMessage.error('删除失败')
     }
   })
+}
+
+const handleBatchDelete = () => {
+  if (!selectedIds.value.length) return
+  
+  ElMessageBox.confirm(`确定要删除选中的 ${selectedIds.value.length} 个流程吗？`, '批量删除提示', {
+    type: 'warning',
+    confirmButtonText: '确定',
+    cancelButtonText: '取消'
+  }).then(async () => {
+    try {
+      await batchDeleteWorkflows(selectedIds.value)
+      ElMessage.success('批量删除成功')
+      selectedIds.value = []
+      fetchData()
+    } catch (error) {
+      ElMessage.error('批量删除失败')
+    }
+  }).catch(() => {})
 }
 
 const handleExecute = async (row, mode = 'prod') => {

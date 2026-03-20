@@ -22,16 +22,22 @@
       <div class="node-sidebar">
         <div class="sidebar-title">动作库</div>
         <div class="node-group">
-          <div 
-            v-for="nodeType in availableNodeTypes" 
-            :key="nodeType.type" 
-            class="node-item"
-            draggable="true"
-            @dragstart="onDragStart($event, nodeType.type)"
-          >
-            <el-icon :class="nodeType.iconClass"><component :is="nodeType.icon" /></el-icon>
-            <span>{{ nodeType.label }}</span>
-          </div>
+          <el-collapse v-model="activeCollapseNames">
+            <el-collapse-item v-for="category in nodeCategories" :key="category.name" :title="category.name" :name="category.name">
+              <div class="node-item-container">
+                <div 
+                  v-for="type in category.types" 
+                  :key="type"
+                  class="node-item" 
+                  :draggable="true" 
+                  @dragstart="onDragStart($event, type)"
+                >
+                  <el-icon :class="availableNodeTypes[type].iconClass"><component :is="availableNodeTypes[type].icon" /></el-icon>
+                  <span>{{ availableNodeTypes[type].label }}</span>
+                </div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
         </div>
       </div>
 
@@ -42,7 +48,6 @@
           :node-types="nodeTypes"
           :default-edge-options="defaultEdgeOptions"
           @connect="onConnect"
-          @nodes-initialized="onNodesInitialized"
         >
           <Background />
           <Controls />
@@ -51,13 +56,17 @@
       </div>
 
       <!-- Properties Panel -->
-      <div class="properties-panel" v-if="selectedNode">
+      <div class="properties-panel" v-if="selectedNode && selectedNode.type">
         <div class="panel-header">
           <span>{{ selectedNode.label }} 配置</span>
           <el-button link @click="selectedNode = null"><el-icon><Close /></el-icon></el-button>
         </div>
-        <div class="panel-content">
+        <div class="panel-content" v-if="selectedNode.data">
           <el-form :model="selectedNode.data.params" label-position="top">
+            <el-form-item label="节点名称">
+              <el-input v-model="selectedNode.label" placeholder="请输入节点名称" />
+            </el-form-item>
+            
             <!-- Dynamic Form based on Node Type -->
             <template v-if="selectedNode.type === 'start'">
               <el-form-item label="执行引擎">
@@ -65,6 +74,27 @@
                   <el-option label="Playwright (推荐)" value="playwright" />
                   <el-option label="DrissionPage" value="drission" />
                 </el-select>
+              </el-form-item>
+              <el-form-item label="代理服务器 (可选)">
+                <el-input v-model="selectedNode.data.params.proxy" placeholder="http://user:pass@host:port" />
+                <div class="branch-tip">支持 http/https/socks5 代理</div>
+                <el-alert
+                  v-if="selectedNode.data.params.engine === 'drission' && selectedNode.data.params.proxy?.includes('@')"
+                  title="注意：DrissionPage 引擎暂不支持带账号密码的代理，建议使用 Playwright 或不带认证的代理。"
+                  type="warning"
+                  :closable="false"
+                  show-icon
+                  style="margin-top: 8px"
+                />
+              </el-form-item>
+              <el-form-item label="自定义请求头 (JSON)">
+                <el-input 
+                  v-model="selectedNode.data.params.headers" 
+                  type="textarea" 
+                  :rows="3" 
+                  placeholder='{"User-Agent": "Mozilla/5.0...", "Referer": "https://google.com"}' 
+                />
+                <div class="branch-tip">请输入合法的 JSON 格式</div>
               </el-form-item>
             </template>
 
@@ -82,6 +112,18 @@
               <el-form-item label="超时时间 (ms)">
                 <el-input-number v-model="selectedNode.data.params.timeout" :min="0" :step="1000" />
               </el-form-item>
+            </template>
+
+            <template v-if="selectedNode.type === 'reload'">
+              <div class="branch-tip">刷新当前页面并等待网络空闲。</div>
+            </template>
+
+            <template v-if="selectedNode.type === 'back'">
+              <div class="branch-tip">返回上一页。</div>
+            </template>
+
+            <template v-if="selectedNode.type === 'forward'">
+              <div class="branch-tip">前进到下一页。</div>
             </template>
 
             <template v-if="selectedNode.type === 'click'">
@@ -124,6 +166,87 @@
               </el-form-item>
             </template>
 
+            <template v-if="selectedNode.type === 'clear'">
+              <el-form-item label="选择器模式">
+                <el-radio-group v-model="selectedNode.data.params.selector_type" size="small">
+                  <el-radio-button label="css">CSS</el-radio-button>
+                  <el-radio-button label="xpath">XPath</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item label="选择器 (Selector)">
+                <el-input v-model="selectedNode.data.params.selector" placeholder="#input-id" />
+              </el-form-item>
+            </template>
+
+            <template v-if="selectedNode.type === 'select'">
+              <el-form-item label="选择器模式">
+                <el-radio-group v-model="selectedNode.data.params.selector_type" size="small">
+                  <el-radio-button label="css">CSS</el-radio-button>
+                  <el-radio-button label="xpath">XPath</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item label="下拉框选择器 (Selector)">
+                <el-input v-model="selectedNode.data.params.selector" placeholder="select#id" />
+              </el-form-item>
+              <el-form-item label="选择值 (Value/Label/Index)">
+                <el-input v-model="selectedNode.data.params.value" placeholder="Option Value" />
+              </el-form-item>
+            </template>
+
+            <template v-if="selectedNode.type === 'scroll'">
+              <el-form-item label="选择器模式">
+                <el-radio-group v-model="selectedNode.data.params.selector_type" size="small">
+                  <el-radio-button label="css">CSS</el-radio-button>
+                  <el-radio-button label="xpath">XPath</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item label="目标元素 (可选)">
+                <el-input v-model="selectedNode.data.params.selector" placeholder="不填则滚动整个窗口" />
+              </el-form-item>
+              <el-form-item label="滚动方向">
+                <el-select v-model="selectedNode.data.params.direction">
+                  <el-option label="向下 (Down)" value="down" />
+                  <el-option label="向上 (Up)" value="up" />
+                  <el-option label="滚动到顶部" value="top" />
+                  <el-option label="滚动到底部" value="bottom" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="滚动距离 (px)" v-if="['down', 'up'].includes(selectedNode.data.params.direction)">
+                <el-input-number v-model="selectedNode.data.params.delta" :min="0" :step="100" />
+              </el-form-item>
+            </template>
+
+            <template v-if="selectedNode.type === 'drag_drop'">
+              <el-form-item label="选择器模式">
+                <el-radio-group v-model="selectedNode.data.params.selector_type" size="small">
+                  <el-radio-button label="css">CSS</el-radio-button>
+                  <el-radio-button label="xpath">XPath</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item label="源元素 (Source Selector)">
+                <el-input v-model="selectedNode.data.params.selector" placeholder="拖拽的起始元素" />
+              </el-form-item>
+              <el-form-item label="目标元素 (Target Selector)">
+                <el-input v-model="selectedNode.data.params.target_selector" placeholder="拖拽到的目标位置" />
+              </el-form-item>
+            </template>
+
+            <template v-if="selectedNode.type === 'upload'">
+              <el-form-item label="选择器模式">
+                <el-radio-group v-model="selectedNode.data.params.selector_type" size="small">
+                  <el-radio-button label="css">CSS</el-radio-button>
+                  <el-radio-button label="xpath">XPath</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item label="文件输入框选择器">
+                <el-input v-model="selectedNode.data.params.selector" placeholder="input[type='file']" />
+              </el-form-item>
+              <el-form-item label="文件路径">
+                <el-input v-model="selectedNode.data.params.file_paths" placeholder="C:/path/to/file1.png, C:/path/to/file2.txt" />
+                <div class="branch-tip">多个文件请用逗号分隔。注意后端执行环境的文件路径。</div>
+              </el-form-item>
+            </template>
+
             <template v-if="selectedNode.type === 'wait'">
               <el-form-item label="选择器模式">
                 <el-radio-group v-model="selectedNode.data.params.selector_type" size="small">
@@ -132,7 +255,7 @@
                 </el-radio-group>
               </el-form-item>
               <el-form-item label="选择器 (可选)">
-                <el-input v-model="selectedNode.data.params.selector" placeholder="等待该元素出现" />
+                <el-input v-model="selectedNode.data.params.selector" placeholder="等待该元素 appear" />
               </el-form-item>
               <el-form-item label="等待时长 (ms)">
                 <el-input-number v-model="selectedNode.data.params.timeout" :min="0" :step="500" />
@@ -171,6 +294,30 @@
               </el-form-item>
             </template>
 
+            <template v-if="selectedNode.type === 'js_execute'">
+              <el-form-item label="JavaScript 脚本">
+                <el-input 
+                  v-model="selectedNode.data.params.script" 
+                  type="textarea" 
+                  :rows="5" 
+                  placeholder="return document.querySelector('.price').innerText;" 
+                />
+                <div class="branch-tip">脚本执行结果将保存到变量中。</div>
+              </el-form-item>
+              <el-form-item label="保存结果至变量名">
+                <el-input v-model="selectedNode.data.params.variable_name" placeholder="js_result" />
+              </el-form-item>
+            </template>
+
+            <template v-if="selectedNode.type === 'set_variable'">
+              <el-form-item label="变量名">
+                <el-input v-model="selectedNode.data.params.variable_name" placeholder="my_var" />
+              </el-form-item>
+              <el-form-item label="变量值">
+                <el-input v-model="selectedNode.data.params.value" placeholder="123 or hello" />
+              </el-form-item>
+            </template>
+
             <template v-if="selectedNode.type === 'if'">
               <el-form-item label="选择器模式">
                 <el-radio-group v-model="selectedNode.data.params.selector_type" size="small">
@@ -184,6 +331,31 @@
               <div class="branch-tip">
                 请连接两条边，首条连接的边为 True 分支，第二条为 False 分支。
               </div>
+            </template>
+
+            <template v-if="selectedNode.type === 'loop'">
+              <el-form-item label="循环次数">
+                <el-input-number v-model="selectedNode.data.params.loop_count" :min="1" :max="100" />
+              </el-form-item>
+              <div class="branch-tip">注意：目前循环仅支持简单的顺序连接，复杂循环逻辑正在开发中。</div>
+            </template>
+
+            <template v-if="selectedNode.type === 'wait_request'">
+              <el-form-item label="URL 匹配模式 (正则/字符串)">
+                <el-input v-model="selectedNode.data.params.url_pattern" placeholder="例如 **/api/v1/user" />
+              </el-form-item>
+              <el-form-item label="超时时间 (ms)">
+                <el-input-number v-model="selectedNode.data.params.timeout" :min="0" :step="1000" />
+              </el-form-item>
+            </template>
+
+            <template v-if="selectedNode.type === 'wait_response'">
+              <el-form-item label="URL 匹配模式 (正则/字符串)">
+                <el-input v-model="selectedNode.data.params.url_pattern" placeholder="例如 **/api/v1/user" />
+              </el-form-item>
+              <el-form-item label="超时时间 (ms)">
+                <el-input-number v-model="selectedNode.data.params.timeout" :min="0" :step="1000" />
+              </el-form-item>
             </template>
 
             <template v-if="selectedNode.type === 'iframe_switch'">
@@ -249,12 +421,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, onMounted, watch, onUnmounted, computed, nextTick, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { 
   ArrowLeft, Check, VideoPlay, Close, Link, Pointer, Edit, Timer, 
-  Search, Switch, Monitor, Files, Camera, Finished, Aim, Connection, InfoFilled, Mouse, Key
+  Search, Switch, Monitor, Files, Camera, Finished, Aim, Connection, InfoFilled, Mouse, Key, Bottom, Delete, Select,
+  Rank, Upload, Refresh, Back, Right, Cpu, Operation, Connection as LinkIcon
 } from '@element-plus/icons-vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -270,7 +443,7 @@ import { getWorkflow, createWorkflow, updateWorkflow, executeWorkflow, getExecut
 
 const route = useRoute()
 const router = useRouter()
-const workflowId = route.params.id
+const workflowId = computed(() => route.params.id)
 
 const workflow = ref({
   name: '未命名流程',
@@ -318,22 +491,61 @@ const startPolling = (executionId) => {
 
 const { addNodes, addEdges, onNodeClick, onPaneClick, toObject, fromObject, onNodesInitialized } = useVueFlow()
 
-const availableNodeTypes = [
-  { type: 'start', label: '开始', icon: Finished, iconClass: 'text-success' },
-  { type: 'goto', label: '页面跳转', icon: Link, iconClass: 'text-primary' },
-  { type: 'click', label: '点击元素', icon: Pointer, iconClass: 'text-primary' },
-  { type: 'type', label: '表单填写', icon: Edit, iconClass: 'text-primary' },
-  { type: 'wait', label: '等待', icon: Timer, iconClass: 'text-warning' },
-  { type: 'extract', label: '提取数据', icon: Aim, iconClass: 'text-success' },
-  { type: 'get_info', label: '获取页面信息', icon: InfoFilled, iconClass: 'text-success' },
-  { type: 'if', label: '条件分支', icon: Connection, iconClass: 'text-warning' },
-  { type: 'tab_switch', label: '标签切换', icon: Files, iconClass: 'text-primary' },
-  { type: 'iframe_switch', label: 'iFrame切换', icon: Monitor, iconClass: 'text-primary' },
-  { type: 'hover', label: '鼠标悬停', icon: Mouse, iconClass: 'text-primary' },
-  { type: 'keypress', label: '按键输入', icon: Key, iconClass: 'text-primary' },
-  { type: 'screenshot', label: '屏幕截图', icon: Camera, iconClass: 'text-success' },
-  { type: 'end', label: '结束', icon: Finished, iconClass: 'text-danger' }
+onNodesInitialized((nodes) => {
+  console.log('Nodes initialized:', nodes.length)
+})
+
+const nodeCategories = [
+  {
+    name: '基础控制',
+    types: ['start', 'end', 'goto', 'wait', 'screenshot', 'reload', 'back', 'forward']
+  },
+  {
+    name: '页面交互',
+    types: ['click', 'type', 'clear', 'select', 'hover', 'keypress', 'scroll', 'drag_drop', 'upload']
+  },
+  {
+    name: '数据处理',
+    types: ['extract', 'get_info', 'js_execute', 'set_variable']
+  },
+  {
+    name: '流程控制',
+    types: ['if', 'loop', 'tab_switch', 'iframe_switch', 'wait_request', 'wait_response']
+  }
 ]
+
+const availableNodeTypes = {
+  start: { type: 'start', label: '开始', icon: Finished, iconClass: 'text-success' },
+  end: { type: 'end', label: '结束', icon: Finished, iconClass: 'text-danger' },
+  goto: { type: 'goto', label: '页面跳转', icon: Link, iconClass: 'text-primary' },
+  wait: { type: 'wait', label: '等待', icon: Timer, iconClass: 'text-warning' },
+  screenshot: { type: 'screenshot', label: '屏幕截图', icon: Camera, iconClass: 'text-success' },
+  click: { type: 'click', label: '点击元素', icon: Pointer, iconClass: 'text-primary' },
+  type: { type: 'type', label: '表单填写', icon: Edit, iconClass: 'text-primary' },
+  clear: { type: 'clear', label: '清空输入', icon: Delete, iconClass: 'text-primary' },
+  select: { type: 'select', label: '下拉选择', icon: Select, iconClass: 'text-primary' },
+  hover: { type: 'hover', label: '鼠标悬停', icon: Mouse, iconClass: 'text-primary' },
+  keypress: { type: 'keypress', label: '按键输入', icon: Key, iconClass: 'text-primary' },
+  scroll: { type: 'scroll', label: '页面滚动', icon: Bottom, iconClass: 'text-primary' },
+  drag_drop: { type: 'drag_drop', label: '拖拽元素', icon: Rank, iconClass: 'text-primary' },
+  upload: { type: 'upload', label: '上传文件', icon: Upload, iconClass: 'text-primary' },
+  reload: { type: 'reload', label: '刷新页面', icon: Refresh, iconClass: 'text-primary' },
+  back: { type: 'back', label: '后退', icon: Back, iconClass: 'text-primary' },
+  forward: { type: 'forward', label: '前进', icon: Right, iconClass: 'text-primary' },
+  extract: { type: 'extract', label: '提取数据', icon: Aim, iconClass: 'text-success' },
+  get_info: { type: 'get_info', label: '获取页面信息', icon: InfoFilled, iconClass: 'text-success' },
+  js_execute: { type: 'js_execute', label: '执行 JS', icon: Cpu, iconClass: 'text-success' },
+  set_variable: { type: 'set_variable', label: '设置变量', icon: Operation, iconClass: 'text-success' },
+  if: { type: 'if', label: '条件分支', icon: Connection, iconClass: 'text-warning' },
+  loop: { type: 'loop', label: '循环', icon: Refresh, iconClass: 'text-warning' },
+  tab_switch: { type: 'tab_switch', label: '标签切换', icon: Files, iconClass: 'text-primary' },
+  iframe_switch: { type: 'iframe_switch', label: 'iFrame切换', icon: Monitor, iconClass: 'text-primary' },
+  wait_request: { type: 'wait_request', label: '等待请求', icon: LinkIcon, iconClass: 'text-warning' },
+  wait_response: { type: 'wait_response', label: '等待响应', icon: LinkIcon, iconClass: 'text-warning' }
+}
+
+const activeCollapseNames = ref(['基础控制', '页面交互', '数据提取', '流程控制'])
+
 
 const defaultEdgeOptions = {
   animated: true,
@@ -345,8 +557,12 @@ const nodeTypes = {
 }
 
 const initWorkflow = async () => {
-  const id = route.params.id
+  const id = workflowId.value
   selectedNode.value = null
+  
+  // 确保 Vue Flow 实例在切换时处于干净状态
+  elements.value = []
+  await nextTick()
   
   if (id) {
     try {
@@ -433,18 +649,24 @@ const onDrop = (event) => {
   const position = { x: event.offsetX, y: event.offsetY }
   
   if (type) {
-    const nodeType = availableNodeTypes.find(nt => nt.type === type)
+    const nodeTypeData = availableNodeTypes[type]
     const newNode = {
       id: `${type}-${Date.now()}`,
       type: type,
-      label: nodeType.label,
+      label: nodeTypeData.label,
       position,
+
       data: { 
         params: {
           ...(type === 'start' ? { engine: 'playwright' } : {}),
           ...(type === 'get_info' ? { info_type: 'url' } : {}),
           ...(type === 'screenshot' ? { full_page: true } : {}),
-          ...(['click', 'type', 'wait', 'extract', 'if', 'iframe_switch', 'hover'].includes(type) ? { selector_type: 'css' } : {})
+          ...(type === 'scroll' ? { direction: 'down', delta: 500 } : {}),
+          ...(['click', 'type', 'wait', 'extract', 'if', 'iframe_switch', 'hover', 'clear', 'select', 'scroll', 'drag_drop', 'upload'].includes(type) ? { selector_type: 'css' } : {}),
+          ...(type === 'js_execute' ? { script: 'return document.title;', variable_name: 'js_result' } : {}),
+          ...(type === 'set_variable' ? { variable_name: 'my_var', value: '' } : {}),
+          ...(type === 'wait_request' || type === 'wait_response' ? { url_pattern: '', timeout: 30000 } : {}),
+          ...(type === 'loop' ? { loop_count: 5 } : {})
         }
       }
     }
@@ -469,7 +691,7 @@ const handleSave = async () => {
         type: n.type,
         label: n.label,
         position: n.position,
-        params: n.data.params
+        params: n.data?.params || {}
       })),
       edges: flowObj.edges.map((e, idx) => ({
         id: e.id,
@@ -481,8 +703,8 @@ const handleSave = async () => {
       variables: workflow.value.variables
     }
 
-    if (workflowId) {
-      await updateWorkflow(workflowId, backendData)
+    if (workflowId.value) {
+      await updateWorkflow(workflowId.value, backendData)
     } else {
       const res = await createWorkflow(backendData)
       router.replace({ name: 'WorkflowEditor', params: { id: res._id } })
@@ -496,7 +718,7 @@ const handleSave = async () => {
 }
 
 const handleExecute = async (mode = 'prod') => {
-  if (!workflowId) {
+  if (!workflowId.value) {
     ElMessage.warning('请先保存后再运行')
     return
   }
@@ -506,7 +728,7 @@ const handleExecute = async (mode = 'prod') => {
   progress.value = '准备中'
   
   try {
-    const res = await executeWorkflow(workflowId, mode)
+    const res = await executeWorkflow(workflowId.value, mode)
     const executionId = res.execution_id
     ElMessage.success(`${mode === 'test' ? '测试' : '正式'}执行已提交`)
     
@@ -571,6 +793,7 @@ const handleDeleteNode = (id) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow-y: auto;
 }
 
 .sidebar-title {
@@ -586,26 +809,55 @@ const handleDeleteNode = (id) => {
   gap: 8px;
 }
 
+.node-item-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .node-item {
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  cursor: grab;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  transition: all 0.2s;
+  padding: 10px 12px;
+  background-color: #f8f9fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  cursor: grab;
+  transition: all 0.3s ease;
 }
 
 .node-item:hover {
-  border-color: #409eff;
-  background: #ecf5ff;
+  background-color: #ecf5ff;
+  border-color: #c6e2ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.node-item i {
+.node-item:active {
+  cursor: grabbing;
+}
+
+.node-item .el-icon {
+  margin-right: 8px;
   font-size: 16px;
+}
+
+/* 覆盖 el-collapse 默认样式，使其更紧凑 */
+:deep(.el-collapse) {
+  border-top: none;
+}
+:deep(.el-collapse-item__header) {
+  font-weight: bold;
+  color: #606266;
+  background-color: transparent;
+  border-bottom: 1px solid #ebeef5;
+}
+:deep(.el-collapse-item__wrap) {
+  border-bottom: none;
+  background-color: transparent;
+}
+:deep(.el-collapse-item__content) {
+  padding-bottom: 10px;
 }
 
 .flow-container {

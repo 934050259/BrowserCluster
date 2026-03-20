@@ -22,7 +22,7 @@ async def create_workflow(workflow: WorkflowCreate):
     return workflow_dict
 
 @router.get("/", response_model=List[WorkflowResponse])
-async def get_workflows(skip: int = 0, limit: int = 20):
+async def get_workflows(skip: int = 0, limit: int = 1000):
     workflows = list(mongo.db.workflows.find().skip(skip).limit(limit))
     return workflows
 
@@ -53,6 +53,12 @@ async def delete_workflow(workflow_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Workflow not found")
     return {"message": "Workflow deleted"}
+
+@router.post("/batch-delete")
+async def batch_delete_workflows(workflow_ids: List[str]):
+    object_ids = [ObjectId(wid) for wid in workflow_ids]
+    result = mongo.db.workflows.delete_many({"_id": {"$in": object_ids}})
+    return {"message": f"Deleted {result.deleted_count} workflows"}
 
 @router.post("/{workflow_id}/execute")
 async def execute_workflow(workflow_id: str, background_tasks: BackgroundTasks, mode: str = "prod"):
