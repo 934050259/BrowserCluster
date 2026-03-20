@@ -65,6 +65,12 @@
 - **Visual Management**: Provides a modern management dashboard based on Vue 3 + Element Plus.
     - **Seamless Refresh Experience**: Deep cache optimization for task management and scraping record pages, supporting automatic data refresh and synchronization in `keep-alive` mode.
     - **Parsing Transparency**: Scraping record details show the matched parsing rule domain in real-time, providing a clear understanding of the source logic for each piece of data.
+- **Visual Workflow Orchestration (Workflow)**:
+    - **Zero-Code Orchestration**: A visual drag-and-drop interface based on Vue Flow for building complex web automation processes by connecting nodes.
+    - **Dual-Engine Compatibility**: Seamlessly switch between Playwright and DrissionPage engines for workflow execution.
+    - **20+ Action Nodes**: Comprehensive coverage of scenarios including Click, Input, Scroll, Drag & Drop, Upload, JS Execution, Conditional Branching, Loops, and Multi-tab/iFrame switching.
+    - **Workflow-Level Scheduling**: Support for independent Cron or Interval scheduling for individual workflows, with real-time "Next Run Time" display on the list page.
+    - **Deep Result Retention**: Automatic capture of node-level screenshots (JPEG Base64 compressed), variable data extraction, and detailed step-by-step execution logs.
 
 ## 🛠️ Technology Stack
 
@@ -139,6 +145,11 @@
 - **💾 Data Storage**
   - **MongoDB**: Stores full task records, scraping results, node statuses, and system configurations.
   - **Redis**: Used for hot data caching and distributed locking to improve system response speed.
+
+- **🧩 Workflow Orchestrator (Vue Flow)**
+  - Node-based visual editor supporting drag-and-drop creation of complex automation scripts.
+  - **Recursive Executor**: Backend recursive executor supporting variable parsing, conditional branching, and loop logic.
+  - **Snapshot System**: Automatically captures operation snapshots compressed as 80% quality JPEG Base64 for database efficiency while maintaining clarity.
 
 - **🖥️ Admin Dashboard (Vue 3)**
   - **Statistics Monitoring**: Real-time display of task success rates, processing durations, and queue backlog.
