@@ -51,12 +51,18 @@ class WorkflowEdge(BaseModel):
     # 针对分支节点的边
     condition_index: Optional[int] = None
 
+class WorkflowSchedule(BaseModel):
+    type: str = Field("none", description="定时类型: none, interval, cron")
+    value: str = Field("", description="定时值: 间隔秒数或 Cron 表达式")
+    is_enabled: bool = Field(False, description="是否启用定时")
+
 class WorkflowBase(BaseModel):
     name: str = Field(..., description="工作流名称")
     description: Optional[str] = Field(None, description="描述")
     nodes: List[WorkflowNode] = Field(default_factory=list)
     edges: List[WorkflowEdge] = Field(default_factory=list)
     variables: Dict[str, Any] = Field(default_factory=dict, description="全局变量/环境配置")
+    schedule: WorkflowSchedule = Field(default_factory=WorkflowSchedule, description="定时配置")
     is_active: bool = Field(True, description="是否启用")
 
 class WorkflowCreate(WorkflowBase):
@@ -68,6 +74,7 @@ class WorkflowUpdate(BaseModel):
     nodes: Optional[List[WorkflowNode]] = None
     edges: Optional[List[WorkflowEdge]] = None
     variables: Optional[Dict[str, Any]] = None
+    schedule: Optional[WorkflowSchedule] = None
     is_active: Optional[bool] = None
 
 from pydantic import BaseModel, Field, ConfigDict
@@ -76,6 +83,8 @@ class WorkflowResponse(WorkflowBase):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     created_at: datetime
     updated_at: datetime
+    last_run_at: Optional[datetime] = None
+    next_run_at: Optional[datetime] = None
 
     model_config = ConfigDict(
         populate_by_name=True,

@@ -58,12 +58,53 @@
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-switch v-model="row.is_active" @change="(val) => handleStatusChange(row, val)" />
+            <div class="cell-column">
+              <el-switch 
+                v-model="row.is_active" 
+                @change="(val) => handleStatusChange(row, val)" 
+                inline-prompt 
+                active-text="启" 
+                inactive-text="停" 
+              />
+              <div class="tag-placeholder"></div>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="updated_at" label="最后修改" width="180">
+        <el-table-column label="定时" width="150" align="center">
           <template #default="{ row }">
-            {{ formatTime(row.updated_at) }}
+            <div class="cell-column">
+              <el-switch 
+                v-model="row.schedule.is_enabled" 
+                @change="(val) => handleScheduleChange(row, val)" 
+                v-if="row.schedule"
+                inline-prompt
+                active-icon="Clock"
+                inactive-icon="Close"
+              />
+              <el-tag 
+                v-if="row.schedule?.is_enabled" 
+                size="small" 
+                type="info" 
+                class="schedule-tag"
+              >
+                {{ row.schedule.type === 'cron' ? 'Cron' : '间隔' }}
+              </el-tag>
+              <div v-else class="tag-placeholder"></div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="时间信息" width="220">
+          <template #default="{ row }">
+            <div class="time-info">
+              <div class="time-item">
+                <span class="time-label">修改:</span>
+                <span class="time-value">{{ formatTime(row.updated_at) }}</span>
+              </div>
+              <div class="time-item" v-if="row.schedule?.is_enabled && row.next_run_at">
+                <span class="time-label" style="color: #67c23a; font-weight: bold;">下次:</span>
+                <span class="time-value" style="color: #67c23a; font-weight: bold;">{{ formatTime(row.next_run_at) }}</span>
+              </div>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="400" fixed="right">
@@ -132,7 +173,7 @@
 import { ref, onMounted, computed, reactive, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Plus, Refresh, VideoPlay, Document, Edit, Delete } from '@element-plus/icons-vue'
+import { Search, Plus, Refresh, VideoPlay, List, Document, Edit, Delete, Clock, Close } from '@element-plus/icons-vue'
 import { getWorkflows, deleteWorkflow, updateWorkflow, executeWorkflow, getWorkflowLogs, getExecutionStatus, getActiveExecutions, batchDeleteWorkflows } from '@/api'
 
 const router = useRouter()
@@ -236,7 +277,10 @@ const fetchData = async () => {
   try {
     const res = await getWorkflows()
     console.log('Workflows response:', res)
-    workflows.value = res || []
+    workflows.value = (res || []).map(w => ({
+      ...w,
+      schedule: w.schedule || { is_enabled: false, type: 'none', value: '' }
+    }))
     
     // 获取活跃任务并开始轮询
     const activeEx = await getActiveExecutions()
@@ -267,6 +311,21 @@ const handleStatusChange = async (row, val) => {
   } catch (error) {
     row.is_active = !val
     ElMessage.error('更新状态失败')
+  }
+}
+
+const handleScheduleChange = async (row, val) => {
+  try {
+    await updateWorkflow(row._id, { 
+      schedule: {
+        ...row.schedule,
+        is_enabled: val
+      }
+    })
+    ElMessage.success(`定时任务已${val ? '开启' : '关闭'}`)
+  } catch (error) {
+    row.schedule.is_enabled = !val
+    ElMessage.error('更新定时任务状态失败')
   }
 }
 
@@ -358,6 +417,50 @@ onUnmounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: flex-end;
+}
+
+.cell-column {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 46px;
+  vertical-align: middle;
+}
+
+.tag-placeholder {
+  height: 20px; /* 与 el-tag size="small" 的高度一致 */
+}
+
+.schedule-tag {
+  font-size: 10px;
+  height: 20px;
+  line-height: 18px;
+  padding: 0 4px;
+}
+
+.time-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.time-item {
+  display: flex;
+  align-items: center;
+}
+
+.time-label {
+  color: #909399;
+  margin-right: 4px;
+  width: 36px;
+  text-align: right;
+}
+
+.time-value {
+  color: #606266;
 }
 
 /* Log Details Styles */

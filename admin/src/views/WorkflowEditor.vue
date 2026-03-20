@@ -8,6 +8,10 @@
         <el-input v-model="workflow.name" placeholder="工作流名称" class="name-input" />
       </div>
       <div class="toolbar-right">
+        <el-button @click="showScheduleDialog = true">
+          <el-icon><Calendar /></el-icon>定时配置
+          <el-tag v-if="workflow.schedule?.is_enabled" size="small" type="success" style="margin-left: 8px">已开启</el-tag>
+        </el-button>
         <el-button type="primary" :loading="saving" @click="handleSave">
           <el-icon><Check /></el-icon>保存
         </el-button>
@@ -54,6 +58,40 @@
           <MiniMap />
         </VueFlow>
       </div>
+
+      <!-- Schedule Dialog -->
+      <el-dialog v-model="showScheduleDialog" title="工作流定时配置" width="500px">
+        <el-form :model="workflow.schedule" label-position="top">
+          <el-form-item label="启用定时任务">
+            <el-switch v-model="workflow.schedule.is_enabled" />
+          </el-form-item>
+          
+          <template v-if="workflow.schedule.is_enabled">
+            <el-form-item label="调度类型">
+              <el-radio-group v-model="workflow.schedule.type" @change="handleScheduleTypeChange">
+                <el-radio-button label="interval">固定间隔</el-radio-button>
+                <el-radio-button label="cron">Cron 表达式</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+
+            <el-form-item v-if="workflow.schedule.type === 'interval'" label="执行间隔 (秒)">
+              <el-input-number v-model="workflow.schedule.value" :min="10" :step="60" style="width: 100%" />
+              <div class="branch-tip">最小支持 10 秒间隔。</div>
+            </el-form-item>
+
+            <el-form-item v-if="workflow.schedule.type === 'cron'" label="Cron 表达式">
+              <el-input v-model="workflow.schedule.value" placeholder="* * * * * (分 时 日 月 周)" />
+              <div class="branch-tip">
+                标准 Cron 格式：分 时 日 月 周<br/>
+                例如: <code>0 9 * * *</code> (每天早上 9 点执行)
+              </div>
+            </el-form-item>
+          </template>
+        </el-form>
+        <template #footer>
+          <el-button type="primary" @click="showScheduleDialog = false">确 定</el-button>
+        </template>
+      </el-dialog>
 
       <!-- Properties Panel -->
       <div class="properties-panel" v-if="selectedNode && selectedNode.type">
@@ -427,7 +465,7 @@ import { ElMessage } from 'element-plus'
 import { 
   ArrowLeft, Check, VideoPlay, Close, Link, Pointer, Edit, Timer, 
   Search, Switch, Monitor, Files, Camera, Finished, Aim, Connection, InfoFilled, Mouse, Key, Bottom, Delete, Select,
-  Rank, Upload, Refresh, Back, Right, Cpu, Operation, Connection as LinkIcon
+  Rank, Upload, Refresh, Back, Right, Cpu, Operation, Connection as LinkIcon, Calendar
 } from '@element-plus/icons-vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -450,8 +488,15 @@ const workflow = ref({
   description: '',
   nodes: [],
   edges: [],
-  variables: {}
+  variables: {},
+  schedule: {
+    type: 'none',
+    value: '',
+    is_enabled: false
+  }
 })
+
+const showScheduleDialog = ref(false)
 
 const elements = ref([])
 const selectedNode = ref(null)
@@ -567,6 +612,16 @@ const initWorkflow = async () => {
   if (id) {
     try {
       const data = await getWorkflow(id)
+      
+      // 确保 schedule 对象存在，防止旧数据报错
+      if (!data.schedule) {
+        data.schedule = {
+          type: 'none',
+          value: '',
+          is_enabled: false
+        }
+      }
+      
       workflow.value = data
       
       // Convert backend model to Vue Flow elements
@@ -604,7 +659,12 @@ const initWorkflow = async () => {
       description: '',
       nodes: [],
       edges: [],
-      variables: {}
+      variables: {},
+      schedule: {
+        type: 'none',
+        value: '',
+        is_enabled: false
+      }
     }
     // New workflow, add start node
     const startNode = {
@@ -636,6 +696,14 @@ onNodeClick(({ node }) => {
 onPaneClick(() => {
   selectedNode.value = null
 })
+
+const handleScheduleTypeChange = (type) => {
+  if (type === 'interval') {
+    workflow.value.schedule.value = 3600 // 默认 1 小时
+  } else if (type === 'cron') {
+    workflow.value.schedule.value = '0 * * * *' // 默认每小时执行一次
+  }
+}
 
 const onDragStart = (event, type) => {
   if (event.dataTransfer) {
@@ -683,6 +751,12 @@ const handleSave = async () => {
   try {
     const flowObj = toObject()
     
+    // 确保定时配置的值是字符串格式
+    const scheduleData = { ...workflow.value.schedule }
+    if (scheduleData.value !== undefined && scheduleData.value !== null) {
+      scheduleData.value = String(scheduleData.value)
+    }
+
     const backendData = {
       name: workflow.value.name,
       description: workflow.value.description,
@@ -700,7 +774,8 @@ const handleSave = async () => {
         label: e.label,
         condition_index: e.data?.condition_index ?? (idx > 0 && flowObj.nodes.find(n => n.id === e.source)?.type === 'if' ? 1 : 0)
       })),
-      variables: workflow.value.variables
+      variables: workflow.value.variables,
+      schedule: scheduleData
     }
 
     if (workflowId.value) {

@@ -16,6 +16,8 @@ async def create_workflow(workflow: WorkflowCreate):
     workflow_dict = workflow.dict()
     workflow_dict["created_at"] = datetime.now()
     workflow_dict["updated_at"] = datetime.now()
+    workflow_dict["next_run_at"] = None
+    workflow_dict["last_run_at"] = None
     
     result = mongo.db.workflows.insert_one(workflow_dict)
     workflow_dict["_id"] = result.inserted_id
@@ -23,7 +25,7 @@ async def create_workflow(workflow: WorkflowCreate):
 
 @router.get("/", response_model=List[WorkflowResponse])
 async def get_workflows(skip: int = 0, limit: int = 1000):
-    workflows = list(mongo.db.workflows.find().skip(skip).limit(limit))
+    workflows = list(mongo.db.workflows.find().sort("updated_at", -1).skip(skip).limit(limit))
     return workflows
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
@@ -33,6 +35,9 @@ async def get_workflow(workflow_id: str):
         raise HTTPException(status_code=404, detail="Workflow not found")
     return workflow
 
+from pymongo import ReturnDocument
+from app.core.scheduler import scheduler
+
 @router.put("/{workflow_id}", response_model=WorkflowResponse)
 async def update_workflow(workflow_id: str, workflow_update: WorkflowUpdate):
     update_data = workflow_update.dict(exclude_unset=True)
@@ -41,10 +46,14 @@ async def update_workflow(workflow_id: str, workflow_update: WorkflowUpdate):
     result = mongo.db.workflows.find_one_and_update(
         {"_id": ObjectId(workflow_id)},
         {"$set": update_data},
-        return_document=True
+        return_document=ReturnDocument.AFTER
     )
     if not result:
         raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    # 同步定时任务到调度器
+    scheduler.add_or_update_workflow_job(result)
+    
     return result
 
 @router.delete("/{workflow_id}")
@@ -52,6 +61,10 @@ async def delete_workflow(workflow_id: str):
     result = mongo.db.workflows.delete_one({"_id": ObjectId(workflow_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Workflow not found")
+        
+    # 从调度器中移除
+    scheduler.remove_workflow_job(workflow_id)
+    
     return {"message": "Workflow deleted"}
 
 @router.post("/batch-delete")
